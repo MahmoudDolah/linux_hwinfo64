@@ -6,7 +6,16 @@ import os
 import curses
 import glob
 import re
+import logging
 from datetime import datetime
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename='hw_monitor.log',
+    filemode='a'
+)
 
 class SystemMonitor:
     def __init__(self):
