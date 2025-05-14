@@ -28,7 +28,7 @@ class SystemMonitor:
             subprocess.check_output(['nvidia-smi'])
             return "nvidia"
         except (subprocess.SubprocessError, FileNotFoundError):
-            pass
+            logging.debug("NVIDIA GPU not detected via nvidia-smi")
         
         # Check for AMD GPU
         try:
@@ -45,9 +45,12 @@ class SystemMonitor:
             lspci_output = subprocess.check_output(['lspci'], universal_newlines=True)
             if 'amd' in lspci_output.lower() and ('vga' in lspci_output.lower() or 'display' in lspci_output.lower()):
                 return "amd"
-        except (subprocess.SubprocessError, FileNotFoundError, IOError):
-            pass
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            logging.debug(f"Error detecting AMD GPU: {e}")
+        except IOError as e:
+            logging.debug(f"IO error while detecting AMD GPU: {e}")
             
+        logging.info("No supported GPU detected")
         return "none"
             
     def get_cpu_info(self):
@@ -71,8 +74,8 @@ class SystemMonitor:
                     for line in f:
                         if line.startswith('model name'):
                             return line.split(':', 1)[1].strip()
-            except:
-                pass
+            except IOError as e:
+                logging.warning(f"Could not read /proc/cpuinfo: {e}")
         return platform.processor()
     
     def _get_cpu_temps(self):
@@ -137,7 +140,8 @@ class SystemMonitor:
                     gpu_info['name'] = name_match
                 else:
                     gpu_info['name'] = "AMD GPU"
-            except:
+            except subprocess.SubprocessError as e:
+                logging.warning(f"Failed to get AMD GPU name via lspci: {e}")
                 gpu_info['name'] = "AMD GPU"
             
             # Try to read temperature
@@ -158,8 +162,10 @@ class SystemMonitor:
                 
                 if temp_value is not None:
                     gpu_info['temperature'] = temp_value
-            except:
-                pass  # Temperature not available
+                else:
+                    logging.debug("No temperature file found for AMD GPU")
+            except (IOError, ValueError) as e:
+                logging.warning(f"Failed to read AMD GPU temperature: {e}")
             
             # Try to read GPU utilization
             try:
@@ -167,8 +173,10 @@ class SystemMonitor:
                 if os.path.exists(gpu_busy_path):
                     with open(gpu_busy_path, 'r') as f:
                         gpu_info['gpu_utilization'] = float(f.read().strip())
-            except:
-                pass  # GPU utilization not available
+                else:
+                    logging.debug("GPU utilization file not found for AMD GPU")
+            except (IOError, ValueError) as e:
+                logging.warning(f"Failed to read AMD GPU utilization: {e}")
             
             # Try to get memory info using rocm-smi if available
             try:
@@ -180,15 +188,19 @@ class SystemMonitor:
                     gpu_info['memory_used'] = float(memory_used_match.group(1))
                     gpu_info['memory_total'] = float(memory_total_match.group(1))
                     gpu_info['memory_utilization'] = (gpu_info['memory_used'] / gpu_info['memory_total']) * 100
-            except:
-                pass  # rocm-smi not available or failed
+                else:
+                    logging.debug("Memory information not found in rocm-smi output")
+            except (subprocess.SubprocessError, FileNotFoundError) as e:
+                logging.debug(f"rocm-smi not available or failed: {e}")
                 
             # If we couldn't get any dynamic data, at least return the static info
             if len(gpu_info) <= 2:  # Only type and name
                 gpu_info["status"] = "Limited AMD GPU info available"
+                logging.warning("Limited AMD GPU information available")
                 
             return gpu_info
         except Exception as e:
+            logging.error(f"Error fetching AMD GPU info: {e}")
             return {"status": f"Error fetching AMD GPU info: {str(e)}"}
     
     def get_memory_info(self):
@@ -380,4 +392,8 @@ if __name__ == "__main__":
     try:
         curses.wrapper(display_monitor)
     except KeyboardInterrupt:
-        print("Monitor stopped.")
+        print("Monitor stopped by user.")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        print(f"Error: {e}")
+        print("Check hw_monitor.log for details.")
