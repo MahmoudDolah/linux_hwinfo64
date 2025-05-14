@@ -7,7 +7,13 @@ import curses
 import glob
 import re
 import logging
+import json
 from datetime import datetime
+
+METRICS_DIR = "./metrics/"
+CPU_METRICS = METRICS_DIR + "cpu_metrics.json"
+GPU_METRICS = METRICS_DIR + "gpu_metrics.json"
+MEMORY_METRICS = METRICS_DIR + "memory_metrics.json"
 
 # Set up logging
 logging.basicConfig(
@@ -238,6 +244,12 @@ def display_monitor(stdscr):
         cpu_info = monitor.get_cpu_info()
         gpu_info = monitor.get_gpu_info()
         memory_info = monitor.get_memory_info()
+        with open(CPU_METRICS, "a") as file:
+            json.dump(cpu_info, file)
+        with open(GPU_METRICS, "a") as file:
+            json.dump(gpu_info, file)
+        with open(MEMORY_METRICS, "a") as file:
+            json.dump(memory_info, file)
         
         # Display CPU information
         stdscr.addstr(2, 0, "CPU INFORMATION", curses.A_BOLD)
