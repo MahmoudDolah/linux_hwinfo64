@@ -22,6 +22,8 @@ Temperature reading paths can vary between different AMD cards
 Memory usage requires ROCm tools to be installed
 GPU utilization might not be available on older cards/drivers
 
+![Screenshot of the tool running in the terminal](assets/linux_hw_monitor_screenshot.png)
+
 
 Additional requirements for AMD GPU support:
 
