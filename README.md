@@ -30,6 +30,8 @@ A new display mode that shows line graphs of your hardware metrics over the last
 - GPU utilization history (if available)
 - GPU memory usage history (if available)
 
+![Screenshot of tool running in graph mode](assets/graph-view.png)
+
 ## Notes
 For AMD GPUs, some metrics might not be available depending on your specific card and drivers:
 - Temperature reading paths can vary between different AMD cards              
