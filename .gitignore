@@ -11,3 +11,4 @@ wheels/
 
 # App specific
 hw_monitor.log
+hw_metrics.csv
