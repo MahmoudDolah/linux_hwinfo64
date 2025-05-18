@@ -13,6 +13,7 @@ It first checks for NVIDIA GPUs using nvidia-smi
 Then it checks for AMD GPUs by:            
 - Looking at vendor ID in `/sys/class/drm/card0/device/vendor`         
 - Using `lspci` to search for AMD graphics adapters       
+- The most accurate way to get usage is using rocm-smi, otherwise it relies on `/sys/class/drm/card0/device/gpu_busy_percent`[1]
 
 
 ## Usage Notes:
@@ -45,3 +46,5 @@ Additional requirements for AMD GPU support:
 ## Links:
 - Docs for installing `rocm` for AMD
   - https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html
+
+[1] I don't know a lot about how linux determines device number, but it will increment the value for `card0` if you ever change your graphics card (presumably it stores the previous device values / configs / whatever). I plan to investigate this further
