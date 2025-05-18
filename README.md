@@ -17,6 +17,19 @@ Then it checks for AMD GPUs by:
 
 ## Usage Notes:
 
+### CLI Arguments
+- `--graph` or `-g`: Run the monitor in graph mode
+- `--record` or `-r`: Record metrics to a CSV file for later analysis
+- `--output` or `-o`: Specify the output CSV file name (default: hw_metrics.csv)
+
+### Graph Mode
+A new display mode that shows line graphs of your hardware metrics over the last 2 minutes
+- CPU usage history
+- Memory usage history
+- GPU utilization history (if available)
+- GPU memory usage history (if available)
+
+## Notes
 For AMD GPUs, some metrics might not be available depending on your specific card and drivers:
 - Temperature reading paths can vary between different AMD cards              
 - Memory usage requires ROCm tools to be installed                
