@@ -271,7 +271,7 @@ def draw_graph(
 
     # Draw y-axis labels
     stdscr.addstr(y_start + 1, x_start - 4, f"{y_max:3d}%")
-    stdscr.addstr(y_start + height // 2, x_start - 4, f"{y_max//2:3d}%")
+    stdscr.addstr(y_start + height // 2, x_start - 4, f"{y_max // 2:3d}%")
     stdscr.addstr(y_start + height, x_start - 4, "  0%")
 
     # Plot data points
