@@ -1,7 +1,7 @@
 [project]
 name = "linux-hwinfo64"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.1.1"
+description = "A lightweight, terminal-based system monitoring tool for Linux that provides real-time hardware metrics (CPU and GPU) in both text and graphical formats"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
