@@ -175,6 +175,34 @@ class SystemMonitor:
             except (IOError, ValueError) as e:
                 logging.warning(f"Failed to read AMD GPU temperature: {e}")
 
+            # Try to get memory info using rocm-smi if available
+            try:
+                rocm_output = subprocess.check_output(
+                    ["rocm-smi", "--showmeminfo","vram"], universal_newlines=True
+                )
+
+                total_memory_match = re.search(r'VRAM Total Memory \(B\): (\d+)', rocm_output)
+                used_memory_match = re.search(r'VRAM Total Used Memory \(B\): (\d+)', rocm_output)
+
+                if total_memory_match and used_memory_match:
+                    total_memory_bytes = int(total_memory_match.group(1))
+                    used_memory_bytes = int(used_memory_match.group(1))
+
+                    # Convert to MB for easier reading
+                    total_memory_mb = total_memory_bytes / (1024 * 1024)
+                    used_memory_mb = used_memory_bytes / (1024 * 1024)
+
+                if total_memory_mb and used_memory_mb:
+                    gpu_info["memory_used"] = used_memory_mb
+                    gpu_info["memory_total"] = total_memory_mb
+                    gpu_info["memory_utilization"] = (
+                        gpu_info["memory_used"] / gpu_info["memory_total"]
+                    ) * 100
+                else:
+                    logging.debug("Memory information not found in rocm-smi output")
+            except (subprocess.SubprocessError, FileNotFoundError) as e:
+                logging.debug(f"rocm-smi not available or failed: {e}")
+
             # Try to read GPU utilization
             try:
                 gpu_busy_path = "/sys/class/drm/card0/device/gpu_busy_percent"
@@ -185,29 +213,6 @@ class SystemMonitor:
                     logging.debug("GPU utilization file not found for AMD GPU")
             except (IOError, ValueError) as e:
                 logging.warning(f"Failed to read AMD GPU utilization: {e}")
-
-            # Try to get memory info using rocm-smi if available
-            try:
-                rocm_output = subprocess.check_output(
-                    ["rocm-smi", "--showmemuse"], universal_newlines=True
-                )
-                memory_used_match = re.search(
-                    r"GPU Memory Used\s*:\s*(\d+)\s*MB", rocm_output
-                )
-                memory_total_match = re.search(
-                    r"GPU Memory Total\s*:\s*(\d+)\s*MB", rocm_output
-                )
-
-                if memory_used_match and memory_total_match:
-                    gpu_info["memory_used"] = float(memory_used_match.group(1))
-                    gpu_info["memory_total"] = float(memory_total_match.group(1))
-                    gpu_info["memory_utilization"] = (
-                        gpu_info["memory_used"] / gpu_info["memory_total"]
-                    ) * 100
-                else:
-                    logging.debug("Memory information not found in rocm-smi output")
-            except (subprocess.SubprocessError, FileNotFoundError) as e:
-                logging.debug(f"rocm-smi not available or failed: {e}")
 
             # If we couldn't get any dynamic data, at least return the static info
             if len(gpu_info) <= 2:  # Only type and name
