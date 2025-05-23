@@ -205,8 +205,8 @@ class SystemMonitor:
 
             # Try to read GPU utilization
             try:
-                gpu_busy_path = "/sys/class/drm/card0/device/gpu_busy_percent"
-                if os.path.exists(gpu_busy_path):
+                gpu_busy_path = self._get_gpu_busy_path()
+                if gpu_busy_path is not None:
                     with open(gpu_busy_path, "r") as f:
                         gpu_info["gpu_utilization"] = float(f.read().strip())
                 else:
@@ -223,6 +223,20 @@ class SystemMonitor:
         except Exception as e:
             logging.error(f"Error fetching AMD GPU info: {e}")
             return {"status": f"Error fetching AMD GPU info: {str(e)}"}
+
+    def _get_gpu_busy_path(self):
+        """
+        Find the first available GPU busy percentage file and return its path.
+        Returns the file path as a string, or None if not found.
+        """
+        gpu_files = glob.glob('/sys/class/drm/card*/device/gpu_busy_percent')
+        for gpu_file in gpu_files:
+            try:
+                if os.access(gpu_file, os.R_OK):
+                    return gpu_file
+            except (IOError, ValueError) as e:
+                continue
+        return None
 
     def get_memory_info(self):
         """Get system memory information"""
