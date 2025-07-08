@@ -118,7 +118,7 @@ def display_monitor_graph(stdscr):
 
         if "memory_utilization" in gpu_info:
             gpu_memory_history.appendleft(gpu_info["memory_utilization"])
-        elif "memory_used" in gpu_info and "memory_total" in gpu_info:
+        elif "memory_used" in gpu_info and "memory_total" in gpu_info and gpu_info["memory_total"] > 0:
             gpu_memory_history.appendleft(
                 (gpu_info["memory_used"] / gpu_info["memory_total"]) * 100
             )
