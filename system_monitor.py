@@ -202,6 +202,9 @@ class SystemMonitor:
                 total_memory_match = re.search(r'VRAM Total Memory \(B\): (\d+)', rocm_output)
                 used_memory_match = re.search(r'VRAM Total Used Memory \(B\): (\d+)', rocm_output)
 
+                total_memory_mb = 0
+                used_memory_mb = 0
+
                 if total_memory_match and used_memory_match:
                     total_memory_bytes = int(total_memory_match.group(1))
                     used_memory_bytes = int(used_memory_match.group(1))
@@ -210,7 +213,7 @@ class SystemMonitor:
                     total_memory_mb = total_memory_bytes / (1024 * 1024)
                     used_memory_mb = used_memory_bytes / (1024 * 1024)
 
-                if total_memory_mb and used_memory_mb:
+                if total_memory_mb > 0 and used_memory_mb > 0:
                     gpu_info["memory_used"] = used_memory_mb
                     gpu_info["memory_total"] = total_memory_mb
                     gpu_info["memory_utilization"] = (
