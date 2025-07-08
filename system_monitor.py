@@ -196,7 +196,7 @@ class SystemMonitor:
             # Try to get memory info using rocm-smi if available
             try:
                 rocm_output = subprocess.check_output(
-                    ["rocm-smi", "--showmeminfo","vram"], universal_newlines=True
+                    ["rocm-smi", "--showmeminfo", "vram"], universal_newlines=True
                 )
 
                 total_memory_match = re.search(r'VRAM Total Memory \(B\): (\d+)', rocm_output)
