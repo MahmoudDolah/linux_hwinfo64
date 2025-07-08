@@ -86,6 +86,7 @@ def display_monitor_graph(stdscr):
     curses.init_pair(4, curses.COLOR_CYAN, -1)
     curses.init_pair(5, curses.COLOR_MAGENTA, -1)
     curses.init_pair(6, curses.COLOR_BLUE, -1)
+    curses.init_pair(7, curses.COLOR_WHITE, -1)
 
     curses.curs_set(0)  # Hide cursor
     stdscr.timeout(1000)  # Set refresh rate to 1 second
@@ -96,6 +97,7 @@ def display_monitor_graph(stdscr):
     memory_history = collections.deque([0] * history_length, maxlen=history_length)
     gpu_util_history = collections.deque([0] * history_length, maxlen=history_length)
     gpu_memory_history = collections.deque([0] * history_length, maxlen=history_length)
+    disk_usage_history = collections.deque([0] * history_length, maxlen=history_length)
 
     # Determine terminal size
     max_y, max_x = stdscr.getmaxyx()
@@ -106,10 +108,18 @@ def display_monitor_graph(stdscr):
         cpu_info = monitor.get_cpu_info()
         gpu_info = monitor.get_gpu_info()
         memory_info = monitor.get_memory_info()
+        disk_info = monitor.get_disk_io_info()
 
         # Update history
         cpu_history.appendleft(cpu_info["average_usage"])
         memory_history.appendleft(memory_info["percent"])
+
+        # Track disk usage (use the first disk's usage percentage)
+        if "status" not in disk_info and disk_info["usage"]:
+            first_disk_usage = next(iter(disk_info["usage"].values()))["percent"]
+            disk_usage_history.appendleft(first_disk_usage)
+        else:
+            disk_usage_history.appendleft(0)
 
         if "gpu_utilization" in gpu_info:
             gpu_util_history.appendleft(gpu_info["gpu_utilization"])
@@ -118,7 +128,11 @@ def display_monitor_graph(stdscr):
 
         if "memory_utilization" in gpu_info:
             gpu_memory_history.appendleft(gpu_info["memory_utilization"])
-        elif "memory_used" in gpu_info and "memory_total" in gpu_info and gpu_info["memory_total"] > 0:
+        elif (
+            "memory_used" in gpu_info
+            and "memory_total" in gpu_info
+            and gpu_info["memory_total"] > 0
+        ):
             gpu_memory_history.appendleft(
                 (gpu_info["memory_used"] / gpu_info["memory_total"]) * 100
             )
@@ -211,6 +225,25 @@ def display_monitor_graph(stdscr):
                     curses.color_pair(6),
                 )
 
+        # Draw disk usage graph
+        disk_y_start = 24
+        if "status" not in gpu_info:
+            if "gpu_utilization" in gpu_info:
+                disk_y_start += 9
+            if "memory_used" in gpu_info and "memory_total" in gpu_info:
+                disk_y_start += 9
+
+        draw_graph(
+            stdscr,
+            disk_y_start,
+            5,
+            graph_width,
+            6,
+            disk_usage_history,
+            "Disk Usage (%) - Last 2 Minutes",
+            curses.color_pair(7),
+        )
+
         # Refresh screen
         stdscr.refresh()
 
@@ -246,6 +279,7 @@ def display_monitor(stdscr):
         cpu_info = monitor.get_cpu_info()
         gpu_info = monitor.get_gpu_info()
         memory_info = monitor.get_memory_info()
+        disk_info = monitor.get_disk_io_info()
 
         # Display CPU information
         stdscr.addstr(2, 0, "CPU INFORMATION", curses.A_BOLD)
@@ -402,6 +436,69 @@ def display_monitor(stdscr):
         stdscr.addstr(mem_y, 36 + bar_length, " " * (50 - bar_length))
         stdscr.addstr(mem_y, 86, "]")
 
+        # Display disk I/O information
+        disk_y = mem_y + 2
+        stdscr.addstr(disk_y, 0, "DISK I/O", curses.A_BOLD)
+        disk_y += 1
+
+        if "status" not in disk_info:
+            # Display total disk I/O
+            total_io = disk_info["total"]
+            read_mb = total_io["read_bytes"] / (1024**2)
+            write_mb = total_io["write_bytes"] / (1024**2)
+
+            stdscr.addstr(
+                disk_y,
+                0,
+                f"Total Read: {read_mb:.1f} MB ({total_io['read_count']} ops)",
+            )
+            disk_y += 1
+            stdscr.addstr(
+                disk_y,
+                0,
+                f"Total Write: {write_mb:.1f} MB ({total_io['write_count']} ops)",
+            )
+            disk_y += 1
+
+            # Display disk usage for main filesystems
+            if disk_info["usage"]:
+                stdscr.addstr(disk_y, 0, "Disk Usage:")
+                disk_y += 1
+
+                # Show only the first 3 disks to avoid screen overflow
+                for i, (device, usage) in enumerate(
+                    list(disk_info["usage"].items())[:3]
+                ):
+                    if usage["total"] > 0:
+                        used_gb = usage["used"] / (1024**3)
+                        total_gb = usage["total"] / (1024**3)
+                        percent = usage["percent"]
+
+                        # Color based on usage
+                        if percent < 80:
+                            color = curses.color_pair(1)  # Green
+                        elif percent < 95:
+                            color = curses.color_pair(2)  # Yellow
+                        else:
+                            color = curses.color_pair(3)  # Red
+
+                        bar_length = int(percent / 2)
+                        device_name = device.split("/")[-1][
+                            :8
+                        ]  # Show only device name, truncated
+
+                        stdscr.addstr(
+                            disk_y,
+                            0,
+                            f"{device_name}: {used_gb:.1f}GB / {total_gb:.1f}GB [{percent:5.1f}%] [",
+                        )
+                        stdscr.addstr(disk_y, 36, "#" * bar_length, color)
+                        stdscr.addstr(disk_y, 36 + bar_length, " " * (50 - bar_length))
+                        stdscr.addstr(disk_y, 86, "]")
+                        disk_y += 1
+        else:
+            stdscr.addstr(disk_y, 0, f"Status: {disk_info['status']}")
+
         # Refresh the screen
         stdscr.refresh()
 
@@ -451,6 +548,20 @@ def main():
             if has_gpu:
                 header.extend(["gpu_util", "gpu_mem_util", "gpu_temp"])
 
+            # Add disk I/O fields if available
+            disk_info = monitor.get_disk_io_info()
+            has_disk_io = "status" not in disk_info
+            if has_disk_io:
+                header.extend(
+                    [
+                        "disk_read_mb",
+                        "disk_write_mb",
+                        "disk_read_ops",
+                        "disk_write_ops",
+                        "primary_disk_usage_pct",
+                    ]
+                )
+
             with open(args.output, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
@@ -462,6 +573,7 @@ def main():
                         # Get current metrics
                         cpu_info = monitor.get_cpu_info()
                         memory_info = monitor.get_memory_info()
+                        disk_info = monitor.get_disk_io_info()
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                         # Basic metrics
@@ -481,6 +593,29 @@ def main():
                                     gpu_info.get("gpu_utilization", 0),
                                     gpu_info.get("memory_utilization", 0),
                                     gpu_info.get("temperature", 0),
+                                ]
+                            )
+
+                        # Add disk I/O metrics if available
+                        if has_disk_io:
+                            total_io = disk_info["total"]
+                            read_mb = total_io["read_bytes"] / (1024**2)
+                            write_mb = total_io["write_bytes"] / (1024**2)
+
+                            # Get primary disk usage percentage
+                            primary_disk_usage = 0
+                            if disk_info["usage"]:
+                                primary_disk_usage = next(
+                                    iter(disk_info["usage"].values())
+                                )["percent"]
+
+                            row.extend(
+                                [
+                                    read_mb,
+                                    write_mb,
+                                    total_io["read_count"],
+                                    total_io["write_count"],
+                                    primary_disk_usage,
                                 ]
                             )
 

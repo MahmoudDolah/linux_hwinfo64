@@ -5,24 +5,52 @@ import os
 import glob
 import re
 import logging
+import time
 
 
 class SystemMonitor:
     def __init__(self):
+        # Cache for GPU detection to avoid repeated subprocess calls
+        self._gpu_detection_cache = {}
+        self._gpu_detection_cache_time = 0
+        self._gpu_detection_cache_ttl = 60  # Cache for 60 seconds
+
         self.gpu_type = self._detect_gpu_type()
-        self._amd_gpu_device_path = self._get_amd_gpu_path() if self.gpu_type == "amd" else None
+        self._amd_gpu_device_path = (
+            self._get_amd_gpu_path() if self.gpu_type == "amd" else None
+        )
 
     def _get_amd_gpu_path(self):
         """
-        Find the AMD GPU device path using globbing.
+        Find the AMD GPU device path using globbing with caching.
         Returns the device path as a string, or None if not found.
         """
-        device_paths = glob.glob('/sys/class/drm/card*/device')
+        current_time = time.time()
+
+        # Check if we have a valid cached result
+        if (
+            current_time - self._gpu_detection_cache_time
+            < self._gpu_detection_cache_ttl
+            and "amd_gpu_path" in self._gpu_detection_cache
+        ):
+            return self._gpu_detection_cache["amd_gpu_path"]
+
+        # Cache miss or expired - perform detection
+        amd_gpu_path = self._perform_amd_gpu_path_detection()
+
+        # Update cache
+        self._gpu_detection_cache["amd_gpu_path"] = amd_gpu_path
+
+        return amd_gpu_path
+
+    def _perform_amd_gpu_path_detection(self):
+        """Perform the actual AMD GPU path detection"""
+        device_paths = glob.glob("/sys/class/drm/card*/device")
         for device_path in device_paths:
-            vendor_file = os.path.join(device_path, 'vendor')
+            vendor_file = os.path.join(device_path, "vendor")
             if os.path.exists(vendor_file):
                 try:
-                    with open(vendor_file, 'r') as f:
+                    with open(vendor_file, "r") as f:
                         vendor_id = f.read().strip()
                         # AMD vendor ID is 0x1002
                         if vendor_id == "0x1002":
@@ -32,7 +60,28 @@ class SystemMonitor:
         return None
 
     def _detect_gpu_type(self):
-        """Detect GPU type (NVIDIA, AMD, or None)"""
+        """Detect GPU type (NVIDIA, AMD, or None) with caching"""
+        current_time = time.time()
+
+        # Check if we have a valid cached result
+        if (
+            current_time - self._gpu_detection_cache_time
+            < self._gpu_detection_cache_ttl
+            and "gpu_type" in self._gpu_detection_cache
+        ):
+            return self._gpu_detection_cache["gpu_type"]
+
+        # Cache miss or expired - perform detection
+        gpu_type = self._perform_gpu_detection()
+
+        # Update cache
+        self._gpu_detection_cache["gpu_type"] = gpu_type
+        self._gpu_detection_cache_time = current_time
+
+        return gpu_type
+
+    def _perform_gpu_detection(self):
+        """Perform the actual GPU detection"""
         # Check for NVIDIA GPU
         try:
             subprocess.check_output(["nvidia-smi"])
@@ -172,7 +221,9 @@ class SystemMonitor:
                 temp_paths = []
                 if self._amd_gpu_device_path:
                     temp_paths = [
-                        os.path.join(self._amd_gpu_device_path, "hwmon/hwmon*/temp1_input"),
+                        os.path.join(
+                            self._amd_gpu_device_path, "hwmon/hwmon*/temp1_input"
+                        ),
                         "/sys/class/hwmon/hwmon*/temp1_input",
                     ]
 
@@ -199,8 +250,12 @@ class SystemMonitor:
                     ["rocm-smi", "--showmeminfo", "vram"], universal_newlines=True
                 )
 
-                total_memory_match = re.search(r'VRAM Total Memory \(B\): (\d+)', rocm_output)
-                used_memory_match = re.search(r'VRAM Total Used Memory \(B\): (\d+)', rocm_output)
+                total_memory_match = re.search(
+                    r"VRAM Total Memory \(B\): (\d+)", rocm_output
+                )
+                used_memory_match = re.search(
+                    r"VRAM Total Used Memory \(B\): (\d+)", rocm_output
+                )
 
                 total_memory_mb = 0
                 used_memory_mb = 0
@@ -247,16 +302,36 @@ class SystemMonitor:
 
     def _get_gpu_busy_path(self):
         """
-        Find the first available GPU busy percentage file and return its path.
+        Find the first available GPU busy percentage file and return its path with caching.
         Returns the file path as a string, or None if not found.
         """
+        current_time = time.time()
+
+        # Check if we have a valid cached result
+        if (
+            current_time - self._gpu_detection_cache_time
+            < self._gpu_detection_cache_ttl
+            and "gpu_busy_path" in self._gpu_detection_cache
+        ):
+            return self._gpu_detection_cache["gpu_busy_path"]
+
+        # Cache miss or expired - perform detection
+        gpu_busy_path = self._perform_gpu_busy_path_detection()
+
+        # Update cache
+        self._gpu_detection_cache["gpu_busy_path"] = gpu_busy_path
+
+        return gpu_busy_path
+
+    def _perform_gpu_busy_path_detection(self):
+        """Perform the actual GPU busy path detection"""
         if self._amd_gpu_device_path:
             gpu_busy_file = os.path.join(self._amd_gpu_device_path, "gpu_busy_percent")
             if os.path.exists(gpu_busy_file) and os.access(gpu_busy_file, os.R_OK):
                 return gpu_busy_file
 
         # Fallback to glob search for other card numbers
-        gpu_files = glob.glob('/sys/class/drm/card*/device/gpu_busy_percent')
+        gpu_files = glob.glob("/sys/class/drm/card*/device/gpu_busy_percent")
         for gpu_file in gpu_files:
             try:
                 if os.access(gpu_file, os.R_OK):
@@ -282,3 +357,71 @@ class SystemMonitor:
             "used": memory.used,
             "free": memory.free,
         }
+
+    def get_disk_io_info(self):
+        """Get disk I/O information"""
+        try:
+            # Get disk I/O counters
+            disk_io = psutil.disk_io_counters()
+            if disk_io is None:
+                return {"status": "Disk I/O information not available"}
+
+            # Get per-disk statistics
+            disk_io_per_disk = psutil.disk_io_counters(perdisk=True)
+
+            # Get disk usage for mounted filesystems
+            disk_usage = {}
+            partitions = psutil.disk_partitions()
+            for partition in partitions:
+                try:
+                    if partition.fstype:  # Skip virtual filesystems
+                        usage = psutil.disk_usage(partition.mountpoint)
+                        disk_usage[partition.device] = {
+                            "mountpoint": partition.mountpoint,
+                            "fstype": partition.fstype,
+                            "total": usage.total,
+                            "used": usage.used,
+                            "free": usage.free,
+                            "percent": (usage.used / usage.total) * 100
+                            if usage.total > 0
+                            else 0,
+                        }
+                except (PermissionError, OSError):
+                    # Skip filesystems we can't access
+                    continue
+
+            disk_info = {
+                "total": {
+                    "read_count": disk_io.read_count,
+                    "write_count": disk_io.write_count,
+                    "read_bytes": disk_io.read_bytes,
+                    "write_bytes": disk_io.write_bytes,
+                    "read_time": disk_io.read_time,
+                    "write_time": disk_io.write_time,
+                    "read_merged_count": getattr(disk_io, "read_merged_count", 0),
+                    "write_merged_count": getattr(disk_io, "write_merged_count", 0),
+                    "busy_time": getattr(disk_io, "busy_time", 0),
+                },
+                "per_disk": {},
+                "usage": disk_usage,
+            }
+
+            # Add per-disk I/O statistics
+            for disk_name, disk_stats in disk_io_per_disk.items():
+                disk_info["per_disk"][disk_name] = {
+                    "read_count": disk_stats.read_count,
+                    "write_count": disk_stats.write_count,
+                    "read_bytes": disk_stats.read_bytes,
+                    "write_bytes": disk_stats.write_bytes,
+                    "read_time": disk_stats.read_time,
+                    "write_time": disk_stats.write_time,
+                    "read_merged_count": getattr(disk_stats, "read_merged_count", 0),
+                    "write_merged_count": getattr(disk_stats, "write_merged_count", 0),
+                    "busy_time": getattr(disk_stats, "busy_time", 0),
+                }
+
+            return disk_info
+
+        except Exception as e:
+            logging.error(f"Error fetching disk I/O info: {e}")
+            return {"status": f"Error fetching disk I/O info: {str(e)}"}
