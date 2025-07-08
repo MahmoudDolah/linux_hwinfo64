@@ -258,7 +258,14 @@ class SystemMonitor:
             try:
                 if os.access(gpu_file, os.R_OK):
                     return gpu_file
-            except (IOError, ValueError) as e:
+            except PermissionError:
+                logging.warning(f"Permission denied accessing {gpu_file}")
+                continue
+            except FileNotFoundError:
+                logging.debug(f"GPU file not found: {gpu_file}")
+                continue
+            except Exception as e:
+                logging.error(f"Unexpected error accessing {gpu_file}: {e}")
                 continue
         return None
 
