@@ -10,6 +10,26 @@ import logging
 class SystemMonitor:
     def __init__(self):
         self.gpu_type = self._detect_gpu_type()
+        self._amd_gpu_device_path = self._get_amd_gpu_path() if self.gpu_type == "amd" else None
+
+    def _get_amd_gpu_path(self):
+        """
+        Find the AMD GPU device path using globbing.
+        Returns the device path as a string, or None if not found.
+        """
+        device_paths = glob.glob('/sys/class/drm/card*/device')
+        for device_path in device_paths:
+            vendor_file = os.path.join(device_path, 'vendor')
+            if os.path.exists(vendor_file):
+                try:
+                    with open(vendor_file, 'r') as f:
+                        vendor_id = f.read().strip()
+                        # AMD vendor ID is 0x1002
+                        if vendor_id == "0x1002":
+                            return device_path
+                except (IOError, ValueError):
+                    continue
+        return None
 
     def _detect_gpu_type(self):
         """Detect GPU type (NVIDIA, AMD, or None)"""
@@ -22,14 +42,10 @@ class SystemMonitor:
 
         # Check for AMD GPU
         try:
-            # Check if any AMD GPU device exists
-            amd_path = "/sys/class/drm/card0/device/vendor"
-            if os.path.exists(amd_path):
-                with open(amd_path, "r") as f:
-                    vendor_id = f.read().strip()
-                    # AMD vendor ID is 0x1002
-                    if vendor_id == "0x1002":
-                        return "amd"
+            # Check if any AMD GPU device exists using our new function
+            amd_device_path = self._get_amd_gpu_path()
+            if amd_device_path:
+                return "amd"
 
             # Alternative check using lspci
             lspci_output = subprocess.check_output(["lspci"], universal_newlines=True)
@@ -153,10 +169,12 @@ class SystemMonitor:
             # Try to read temperature
             try:
                 # Different AMD cards might use different paths
-                temp_paths = [
-                    "/sys/class/drm/card0/device/hwmon/hwmon*/temp1_input",
-                    "/sys/class/hwmon/hwmon*/temp1_input",
-                ]
+                temp_paths = []
+                if self._amd_gpu_device_path:
+                    temp_paths = [
+                        os.path.join(self._amd_gpu_device_path, "hwmon/hwmon*/temp1_input"),
+                        "/sys/class/hwmon/hwmon*/temp1_input",
+                    ]
 
                 temp_value = None
                 for path_pattern in temp_paths:
@@ -229,6 +247,12 @@ class SystemMonitor:
         Find the first available GPU busy percentage file and return its path.
         Returns the file path as a string, or None if not found.
         """
+        if self._amd_gpu_device_path:
+            gpu_busy_file = os.path.join(self._amd_gpu_device_path, "gpu_busy_percent")
+            if os.path.exists(gpu_busy_file) and os.access(gpu_busy_file, os.R_OK):
+                return gpu_busy_file
+
+        # Fallback to glob search for other card numbers
         gpu_files = glob.glob('/sys/class/drm/card*/device/gpu_busy_percent')
         for gpu_file in gpu_files:
             try:
