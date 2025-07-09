@@ -6,6 +6,22 @@ import collections
 from datetime import datetime
 from system_monitor import SystemMonitor
 
+
+def safe_addstr(stdscr, y, x, text, attr=curses.A_NORMAL):
+    """Safely add string to screen with bounds checking"""
+    try:
+        max_y, max_x = stdscr.getmaxyx()
+        if y >= 0 and y < max_y and x >= 0 and x < max_x:
+            # Truncate text if it would exceed screen width
+            available_width = max_x - x
+            if len(text) > available_width:
+                text = text[:available_width]
+            stdscr.addstr(y, x, text, attr)
+    except curses.error:
+        # Silently ignore curses errors (terminal too small, etc.)
+        pass
+
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -91,6 +107,23 @@ def display_monitor_graph(stdscr):
     curses.curs_set(0)  # Hide cursor
     stdscr.timeout(1000)  # Set refresh rate to 1 second
 
+    # Check minimum terminal size
+    min_height, min_width = 35, 100
+    max_y, max_x = stdscr.getmaxyx()
+    if max_y < min_height or max_x < min_width:
+        safe_addstr(
+            stdscr,
+            0,
+            0,
+            f"Terminal too small! Need at least {min_width}x{min_height}, got {max_x}x{max_y}",
+        )
+        safe_addstr(stdscr, 1, 0, "Press 'q' to quit")
+        stdscr.refresh()
+        while True:
+            key = stdscr.getch()
+            if key == ord("q"):
+                return
+
     # Store historical data
     history_length = 120  # 2 minutes of data at 1s intervals
     cpu_history = collections.deque([0] * history_length, maxlen=history_length)
@@ -166,9 +199,9 @@ def display_monitor_graph(stdscr):
                 if "temperature" in gpu_info
                 else ""
             )
-            stdscr.addstr(2, 0, f"GPU: {gpu_name}{gpu_temp}")
+            safe_addstr(stdscr, 2, 0, f"GPU: {gpu_name}{gpu_temp}")
         else:
-            stdscr.addstr(2, 0, f"GPU: {gpu_info['status']}")
+            safe_addstr(stdscr, 2, 0, f"GPU: {gpu_info['status']}")
 
         # Draw CPU usage graph
         draw_graph(
@@ -266,13 +299,34 @@ def display_monitor(stdscr):
     curses.curs_set(0)  # Hide cursor
     stdscr.timeout(1000)  # Set getch() timeout to 1 second
 
+    # Check minimum terminal size
+    min_height, min_width = 25, 80
+    max_y, max_x = stdscr.getmaxyx()
+    if max_y < min_height or max_x < min_width:
+        safe_addstr(
+            stdscr,
+            0,
+            0,
+            f"Terminal too small! Need at least {min_width}x{min_height}, got {max_x}x{max_y}",
+        )
+        safe_addstr(stdscr, 1, 0, "Press 'q' to quit")
+        stdscr.refresh()
+        while True:
+            key = stdscr.getch()
+            if key == ord("q"):
+                return
+
     while True:
         stdscr.clear()
 
         # Display time
         now = datetime.now().strftime("%H:%M:%S")
-        stdscr.addstr(
-            0, 0, f"Linux Hardware Monitor - {now} (Press 'q' to quit)", curses.A_BOLD
+        safe_addstr(
+            stdscr,
+            0,
+            0,
+            f"Linux Hardware Monitor - {now} (Press 'q' to quit)",
+            curses.A_BOLD,
         )
 
         # Get system information
@@ -283,7 +337,7 @@ def display_monitor(stdscr):
 
         # Display CPU information
         stdscr.addstr(2, 0, "CPU INFORMATION", curses.A_BOLD)
-        stdscr.addstr(3, 0, f"Model: {cpu_info['name']}")
+        safe_addstr(stdscr, 3, 0, f"Model: {cpu_info['name']}")
         stdscr.addstr(
             4,
             0,
@@ -329,8 +383,8 @@ def display_monitor(stdscr):
                     color = curses.color_pair(2)  # Yellow
                 else:
                     color = curses.color_pair(3)  # Red
-                stdscr.addstr(temp_y, 0, f"{sensor}: ", curses.A_BOLD)
-                stdscr.addstr(temp_y, 20, f"{temp:.1f}°C", color)
+                safe_addstr(stdscr, temp_y, 0, f"{sensor}: ", curses.A_BOLD)
+                safe_addstr(stdscr, temp_y, 20, f"{temp:.1f}°C", color)
                 temp_y += 1
         else:
             stdscr.addstr(temp_y, 0, "Temperature data not available")
@@ -349,7 +403,7 @@ def display_monitor(stdscr):
             stdscr.addstr(gpu_y, 0, f"Type: {gpu_type}")
             gpu_y += 1
 
-            stdscr.addstr(gpu_y, 0, f"Model: {gpu_info['name']}")
+            safe_addstr(stdscr, gpu_y, 0, f"Model: {gpu_info['name']}")
             gpu_y += 1
 
             # Temperature if available
@@ -487,7 +541,8 @@ def display_monitor(stdscr):
                             :8
                         ]  # Show only device name, truncated
 
-                        stdscr.addstr(
+                        safe_addstr(
+                            stdscr,
                             disk_y,
                             0,
                             f"{device_name}: {used_gb:.1f}GB / {total_gb:.1f}GB [{percent:5.1f}%] [",
@@ -497,7 +552,7 @@ def display_monitor(stdscr):
                         stdscr.addstr(disk_y, 86, "]")
                         disk_y += 1
         else:
-            stdscr.addstr(disk_y, 0, f"Status: {disk_info['status']}")
+            safe_addstr(stdscr, disk_y, 0, f"Status: {disk_info['status']}")
 
         # Refresh the screen
         stdscr.refresh()
@@ -631,9 +686,27 @@ def main():
                 except KeyboardInterrupt:
                     print("\nRecording stopped by user.")
         elif args.graph:
-            curses.wrapper(display_monitor_graph)
+            try:
+                curses.wrapper(display_monitor_graph)
+            except curses.error as e:
+                print(f"Terminal error: {e}")
+                print(
+                    "Try resizing your terminal or use a different terminal emulator."
+                )
+            except Exception as e:
+                logging.error(f"Unexpected error in graph mode: {e}")
+                print(f"An error occurred: {e}")
         else:
-            curses.wrapper(display_monitor)
+            try:
+                curses.wrapper(display_monitor)
+            except curses.error as e:
+                print(f"Terminal error: {e}")
+                print(
+                    "Try resizing your terminal or use a different terminal emulator."
+                )
+            except Exception as e:
+                logging.error(f"Unexpected error in display mode: {e}")
+                print(f"An error occurred: {e}")
     except KeyboardInterrupt:
         print("Monitor stopped by user.")
     except Exception as e:

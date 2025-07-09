@@ -287,8 +287,12 @@ class SystemMonitor:
                         gpu_info["gpu_utilization"] = float(f.read().strip())
                 else:
                     logging.debug("GPU utilization file not found for AMD GPU")
+            except AttributeError as e:
+                logging.error(f"Method _get_gpu_busy_path not found: {e}")
             except (IOError, ValueError) as e:
                 logging.warning(f"Failed to read AMD GPU utilization: {e}")
+            except Exception as e:
+                logging.error(f"Unexpected error in GPU utilization detection: {e}")
 
             # If we couldn't get any dynamic data, at least return the static info
             if len(gpu_info) <= 2:  # Only type and name
