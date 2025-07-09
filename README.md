@@ -1,52 +1,112 @@
-# Linux HWINFO64
+# Linux Hardware Monitor
 
-Written in Python    
-This is a scaled down proof of concept. It's a simple script to output a system's hardware information and some simple metrics for the CPU and GPU
-In the future, I might expand this to include more of the features of hwinfo64, but it's a simple MVP for now    
+A comprehensive Python-based system monitoring tool for Linux that provides real-time hardware metrics similar to hwinfo64. Features both text-based and graphical interfaces for monitoring CPU, GPU, memory, and disk usage.
+
+## Features
+
+### Real-time Monitoring
+- **CPU Information**: Model name, core count, frequency, per-core usage, and temperature
+- **GPU Support**: NVIDIA and AMD GPU detection with utilization, memory, temperature, and power draw
+- **Memory Monitoring**: System RAM usage with detailed statistics
+- **Disk I/O**: Real-time disk usage, I/O statistics, and filesystem information
+- **Historical Data**: 2-minute rolling history for all metrics
+
+### Display Modes
+- **Standard Mode**: Detailed text-based display with color-coded usage bars
+- **Graph Mode**: Real-time line graphs showing metric trends over time
+- **CSV Recording**: Export metrics to CSV files for analysis
+
+### Advanced GPU Detection
+- **NVIDIA**: Full support via nvidia-smi with temperature, utilization, memory, and power
+- **AMD**: Multi-layer detection system:
+  - Vendor ID checking via `/sys/class/drm/card*/device/vendor`
+  - lspci fallback detection
+  - ROCm support for detailed metrics
+  - Sysfs fallback for basic utilization
 
 ## Requirements
-- `nvidia-smi` for Nvidia GPUs
-- `rocm-smi` for AMD GPUs
 
-## GPU Detection
-It first checks for NVIDIA GPUs using nvidia-smi        
-Then it checks for AMD GPUs by:            
-- Looking at vendor ID in `/sys/class/drm/card0/device/vendor`         
-- Using `lspci` to search for AMD graphics adapters       
-- The most accurate way to get usage is using rocm-smi, otherwise it relies on `/sys/class/drm/card0/device/gpu_busy_percent`[1]
+### Core Dependencies
+- Python 3.10+ with psutil
+- ruff (for code formatting/linting)
 
+### GPU Support (Optional)
+- **NVIDIA GPUs**: `nvidia-smi` command-line tool
+- **AMD GPUs**: `rocm-smi` for detailed metrics (basic support works without)
 
-## Usage Notes:
+## Usage
+
+### Running the Application
+```bash
+uv run main.py                   # Standard monitoring mode
+uv run main.py --graph           # Graph mode with historical data
+uv run main.py --record          # Record metrics to CSV
+uv run main.py --output file.csv # Custom CSV output file
+```
 
 ### CLI Arguments
-- `--graph` or `-g`: Run the monitor in graph mode
-- `--record` or `-r`: Record metrics to a CSV file for later analysis
-- `--output` or `-o`: Specify the output CSV file name (default: hw_metrics.csv)
+- `--graph` or `-g`: Run in graph mode with historical charts
+- `--record` or `-r`: Record metrics to CSV file for analysis
+- `--output` or `-o`: Specify output CSV filename (default: hw_metrics.csv)
 
-### Graph Mode
-A new display mode that shows line graphs of your hardware metrics over the last 2 minutes
-- CPU usage history
-- Memory usage history
+### Graph Mode Features
+Real-time line graphs showing 2-minute historical data:
+- CPU usage trends
+- Memory usage patterns
 - GPU utilization history (if available)
-- GPU memory usage history (if available)
+- GPU memory usage trends (if available)
+- Disk usage monitoring
 
 ![Screenshot of tool running in graph mode](assets/graph-view.png)
 
-## Notes
-For AMD GPUs, some metrics might not be available depending on your specific card and drivers:
-- Temperature reading paths can vary between different AMD cards              
-- Memory usage requires ROCm tools to be installed                
-- GPU utilization might not be available on older cards/drivers                
-
 ![Screenshot of the tool running in the terminal](assets/linux_hw_monitor_screenshot.png)
 
+## Technical Implementation
 
-Additional requirements for AMD GPU support:
-- For basic detection: standard Linux utilities like lspci
-- For more detailed metrics: AMD's ROCm tools (rocm-smi)
+### Architecture
+- **SystemMonitor Class**: Core hardware detection and metrics collection
+- **Caching System**: 60-second GPU detection cache to minimize system calls
+- **Graceful Degradation**: Missing GPU tools don't crash the application
+- **Multi-source Data**: Combines multiple system interfaces for comprehensive metrics
 
-## Links:
-- Docs for installing `rocm` for AMD
-  - https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html
+### GPU Detection Logic
+1. **NVIDIA Detection**: Uses nvidia-smi for comprehensive metrics
+2. **AMD Detection**: Multi-layered approach:
+   - Primary: Vendor ID verification via sysfs
+   - Secondary: lspci parsing for device identification
+   - Metrics: ROCm tools for detailed info, sysfs fallback for basic usage
 
-[1] I don't know a lot about how linux determines device number, but it will increment the value for `card0` if you ever change your graphics card (presumably it stores the previous device values / configs / whatever). I plan to investigate this further
+### Performance Features
+- **Efficient Polling**: 1-second refresh rate with minimal system impact
+- **Terminal Safety**: Automatic bounds checking and resize handling
+- **Memory Efficient**: Rolling deque for historical data storage
+
+## Development
+
+### Code Quality
+```bash
+uv run ruff check .     # Lint code
+uv run ruff format .    # Format code
+```
+
+### Logging
+The application logs GPU detection issues and errors to `hw_monitor.log` for debugging.
+
+## Compatibility Notes
+
+### AMD GPU Support
+AMD GPU metrics availability depends on your specific hardware and drivers:
+- **Temperature**: Varies by card model and hwmon support
+- **Memory Usage**: Requires ROCm tools for detailed metrics
+- **GPU Utilization**: May not be available on older cards/drivers
+- **Device Detection**: Automatically handles multiple GPU cards
+
+### System Requirements
+- **Minimum Terminal**: 80x25 for standard mode, 100x35 for graph mode
+- **Permissions**: Some GPU metrics may require elevated permissions
+- **Dependencies**: Works with standard Linux utilities, enhanced with GPU tools
+
+## Links
+- [ROCm Installation Guide](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html)
+- [NVIDIA Driver Installation](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)
+
