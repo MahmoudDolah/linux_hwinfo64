@@ -6,6 +6,14 @@ import glob
 import re
 import logging
 import time
+import socket
+
+try:
+    import distro
+
+    HAS_DISTRO = True
+except ImportError:
+    HAS_DISTRO = False
 
 
 class SystemMonitor:
@@ -429,3 +437,139 @@ class SystemMonitor:
         except Exception as e:
             logging.error(f"Error fetching disk I/O info: {e}")
             return {"status": f"Error fetching disk I/O info: {str(e)}"}
+
+    def get_system_info(self):
+        """Get comprehensive system information for neofetch-like display"""
+        try:
+            # Get OS information
+            if HAS_DISTRO:
+                os_name = distro.name()
+                os_version = distro.version()
+                os_codename = distro.codename()
+            else:
+                # Fallback to reading /etc/os-release
+                try:
+                    with open("/etc/os-release", "r") as f:
+                        os_release = {}
+                        for line in f:
+                            if "=" in line:
+                                key, value = line.strip().split("=", 1)
+                                os_release[key] = value.strip('"')
+                        os_name = os_release.get("NAME", "Linux")
+                        os_version = os_release.get("VERSION", "Unknown")
+                        os_codename = os_release.get("VERSION_CODENAME", "")
+                except (IOError, ValueError, KeyError):
+                    os_name = platform.system()
+                    os_version = platform.release()
+                    os_codename = ""
+
+            os_info = {
+                "name": os_name,
+                "version": os_version,
+                "codename": os_codename,
+                "kernel": platform.release(),
+                "architecture": platform.machine(),
+                "hostname": socket.gethostname(),
+                "username": os.getenv("USER", "unknown"),
+            }
+
+            # Get uptime
+            with open("/proc/uptime", "r") as f:
+                uptime_seconds = float(f.read().split()[0])
+                days = int(uptime_seconds // 86400)
+                hours = int((uptime_seconds % 86400) // 3600)
+                minutes = int((uptime_seconds % 3600) // 60)
+
+                if days > 0:
+                    uptime_str = f"{days}d {hours}h {minutes}m"
+                elif hours > 0:
+                    uptime_str = f"{hours}h {minutes}m"
+                else:
+                    uptime_str = f"{minutes}m"
+
+                os_info["uptime"] = uptime_str
+
+            # Get shell information
+            shell = os.getenv("SHELL", "unknown")
+            if shell != "unknown":
+                shell = os.path.basename(shell)
+            os_info["shell"] = shell
+
+            # Get desktop environment/window manager
+            desktop = (
+                os.getenv("XDG_CURRENT_DESKTOP")
+                or os.getenv("DESKTOP_SESSION")
+                or "unknown"
+            )
+            os_info["desktop"] = desktop
+
+            # Get terminal information
+            terminal = os.getenv("TERM") or "unknown"
+            os_info["terminal"] = terminal
+
+            return os_info
+
+        except Exception as e:
+            logging.error(f"Error fetching system info: {e}")
+            return {"status": f"Error fetching system info: {str(e)}"}
+
+    def display_neofetch_info(self):
+        """Display system information in neofetch-like format"""
+        try:
+            system_info = self.get_system_info()
+            cpu_info = self.get_cpu_info()
+            gpu_info = self.get_gpu_info()
+            memory_info = self.get_memory_info()
+
+            # Simple ASCII art (optional)
+            ascii_art = [
+                "    .---.",
+                "   /     \\",
+                "  | () () |",
+                "   \\  ^  /",
+                "    |||||",
+                "    |||||",
+            ]
+
+            # Print header with hostname
+            print(f"\n{system_info['username']}@{system_info['hostname']}")
+            print(
+                "-" * (len(system_info["username"]) + len(system_info["hostname"]) + 1)
+            )
+
+            # Display system information with ASCII art
+            info_lines = [
+                f"OS: {system_info['name']} {system_info['version']}",
+                f"Kernel: {system_info['kernel']}",
+                f"Uptime: {system_info['uptime']}",
+                f"Shell: {system_info['shell']}",
+                f"Desktop: {system_info['desktop']}",
+                f"Terminal: {system_info['terminal']}",
+                f"CPU: {cpu_info['name']}",
+                f"Cores: {cpu_info['physical_count']} physical, {cpu_info['count']} logical",
+            ]
+
+            # Add GPU info if available
+            if "status" not in gpu_info:
+                info_lines.append(f"GPU: {gpu_info['name']}")
+
+            # Add memory info
+            mem_used_gb = memory_info["used"] / (1024**3)
+            mem_total_gb = memory_info["total"] / (1024**3)
+            info_lines.append(
+                f"Memory: {mem_used_gb:.1f}GB / {mem_total_gb:.1f}GB ({memory_info['percent']:.1f}%)"
+            )
+
+            # Display with ASCII art on the left
+            max_lines = max(len(ascii_art), len(info_lines))
+
+            for i in range(max_lines):
+                ascii_part = ascii_art[i] if i < len(ascii_art) else " " * 12
+                info_part = info_lines[i] if i < len(info_lines) else ""
+                print(f"{ascii_part}   {info_part}")
+
+            print()  # Extra newline at the end
+
+        except Exception as e:
+            logging.error(f"Error displaying neofetch info: {e}")
+            print(f"Error displaying system info: {e}")
