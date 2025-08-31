@@ -14,6 +14,7 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
 ### Display Modes
 - **Standard Mode**: Detailed text-based display with color-coded usage bars
 - **Graph Mode**: Real-time line graphs showing metric trends over time
+- **Neofetch Mode**: System information display in neofetch-like format
 - **CSV Recording**: Export metrics to CSV files for analysis
 
 ### Advanced GPU Detection
@@ -40,12 +41,14 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
 ```bash
 uv run main.py                   # Standard monitoring mode
 uv run main.py --graph           # Graph mode with historical data
+uv run main.py --neofetch        # Display system info in neofetch-like format
 uv run main.py --record          # Record metrics to CSV
 uv run main.py --output file.csv # Custom CSV output file
 ```
 
 ### CLI Arguments
 - `--graph` or `-g`: Run in graph mode with historical charts
+- `--neofetch` or `-n`: Display system information in neofetch-like format
 - `--record` or `-r`: Record metrics to CSV file for analysis
 - `--output` or `-o`: Specify output CSV filename (default: hw_metrics.csv)
 

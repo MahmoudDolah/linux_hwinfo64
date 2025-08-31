@@ -581,10 +581,20 @@ def main():
         default="hw_metrics.csv",
         help="Output CSV file when using --record",
     )
+    parser.add_argument(
+        "--neofetch",
+        "-n",
+        action="store_true",
+        help="Show system information in neofetch-like format",
+    )
     args = parser.parse_args()
 
     try:
-        if args.record:
+        if args.neofetch:
+            # Display neofetch-like system information
+            monitor = SystemMonitor()
+            monitor.display_neofetch_info()
+        elif args.record:
             # Setup for CSV recording
             import csv
 
