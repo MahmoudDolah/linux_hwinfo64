@@ -334,6 +334,7 @@ def display_monitor(stdscr):
         gpu_info = monitor.get_gpu_info()
         memory_info = monitor.get_memory_info()
         disk_info = monitor.get_disk_io_info()
+        network_info = monitor.get_network_info()
 
         # Display CPU information
         stdscr.addstr(2, 0, "CPU INFORMATION", curses.A_BOLD)
@@ -553,6 +554,60 @@ def display_monitor(stdscr):
                         disk_y += 1
         else:
             safe_addstr(stdscr, disk_y, 0, f"Status: {disk_info['status']}")
+
+        # Display network information
+        net_y = disk_y + 2
+        stdscr.addstr(net_y, 0, "NETWORK", curses.A_BOLD)
+        net_y += 1
+
+        if "error" not in network_info:
+            # Display total bandwidth
+            total_sent_mb = network_info["total_bytes_sent_per_sec"] / (1024**2)
+            total_recv_mb = network_info["total_bytes_recv_per_sec"] / (1024**2)
+
+            safe_addstr(stdscr, net_y, 0, f"Total Upload: {total_sent_mb:.2f} MB/s")
+            net_y += 1
+            safe_addstr(stdscr, net_y, 0, f"Total Download: {total_recv_mb:.2f} MB/s")
+            net_y += 1
+
+            # Display active interfaces
+            active_interfaces = [
+                name
+                for name, info in network_info["interfaces"].items()
+                if info["status"] == "up"
+            ]
+
+            if active_interfaces:
+                safe_addstr(stdscr, net_y, 0, "Active Interfaces:")
+                net_y += 1
+
+                # Show first 3 active interfaces to avoid screen overflow
+                for interface_name in active_interfaces[:3]:
+                    interface = network_info["interfaces"][interface_name]
+
+                    sent_kb = interface["bytes_sent_per_sec"] / 1024
+                    recv_kb = interface["bytes_recv_per_sec"] / 1024
+
+                    # Determine color based on activity
+                    if sent_kb > 100 or recv_kb > 100:  # >100 KB/s
+                        color = curses.color_pair(2)  # Yellow (active)
+                    elif sent_kb > 10 or recv_kb > 10:  # >10 KB/s
+                        color = curses.color_pair(1)  # Green (moderate)
+                    else:
+                        color = curses.A_NORMAL  # Normal (low activity)
+
+                    safe_addstr(
+                        stdscr,
+                        net_y,
+                        0,
+                        f"{interface_name}: ↑{sent_kb:.1f} KB/s ↓{recv_kb:.1f} KB/s",
+                        color,
+                    )
+                    net_y += 1
+            else:
+                safe_addstr(stdscr, net_y, 0, "No active network interfaces")
+        else:
+            safe_addstr(stdscr, net_y, 0, f"Network Error: {network_info['error']}")
 
         # Refresh the screen
         stdscr.refresh()
