@@ -57,9 +57,16 @@ def draw_graph(
         stdscr.addstr(y_start + height + 1, x_start + i, "-")
 
     # Draw y-axis labels
-    stdscr.addstr(y_start + 1, x_start - 4, f"{y_max:3d}%")
-    stdscr.addstr(y_start + height // 2, x_start - 4, f"{y_max // 2:3d}%")
-    stdscr.addstr(y_start + height, x_start - 4, "  0%")
+    if y_max >= 100:
+        # Use percentage format for values >= 100 (like CPU usage)
+        stdscr.addstr(y_start + 1, x_start - 4, f"{int(y_max):3d}%")
+        stdscr.addstr(y_start + height // 2, x_start - 4, f"{int(y_max // 2):3d}%")
+        stdscr.addstr(y_start + height, x_start - 4, "  0%")
+    else:
+        # Use decimal format for smaller values (like MB/s)
+        stdscr.addstr(y_start + 1, x_start - 4, f"{y_max:4.1f}")
+        stdscr.addstr(y_start + height // 2, x_start - 4, f"{y_max / 2:4.1f}")
+        stdscr.addstr(y_start + height, x_start - 4, " 0.0")
 
     # Plot data points
     data_len = len(data)
@@ -107,8 +114,8 @@ def display_monitor_graph(stdscr):
     curses.curs_set(0)  # Hide cursor
     stdscr.timeout(1000)  # Set refresh rate to 1 second
 
-    # Check minimum terminal size
-    min_height, min_width = 35, 100
+    # Check minimum terminal size (increased for network graphs)
+    min_height, min_width = 55, 100
     max_y, max_x = stdscr.getmaxyx()
     if max_y < min_height or max_x < min_width:
         safe_addstr(
@@ -131,6 +138,12 @@ def display_monitor_graph(stdscr):
     gpu_util_history = collections.deque([0] * history_length, maxlen=history_length)
     gpu_memory_history = collections.deque([0] * history_length, maxlen=history_length)
     disk_usage_history = collections.deque([0] * history_length, maxlen=history_length)
+    network_upload_history = collections.deque(
+        [0] * history_length, maxlen=history_length
+    )
+    network_download_history = collections.deque(
+        [0] * history_length, maxlen=history_length
+    )
 
     # Determine terminal size
     max_y, max_x = stdscr.getmaxyx()
@@ -142,6 +155,7 @@ def display_monitor_graph(stdscr):
         gpu_info = monitor.get_gpu_info()
         memory_info = monitor.get_memory_info()
         disk_info = monitor.get_disk_io_info()
+        network_info = monitor.get_network_info()
 
         # Update history
         cpu_history.appendleft(cpu_info["average_usage"])
@@ -171,6 +185,16 @@ def display_monitor_graph(stdscr):
             )
         else:
             gpu_memory_history.appendleft(0)
+
+        # Track network bandwidth (convert to MB/s for easier visualization)
+        if "error" not in network_info:
+            upload_mbps = network_info["total_bytes_sent_per_sec"] / (1024 * 1024)
+            download_mbps = network_info["total_bytes_recv_per_sec"] / (1024 * 1024)
+            network_upload_history.appendleft(upload_mbps)
+            network_download_history.appendleft(download_mbps)
+        else:
+            network_upload_history.appendleft(0)
+            network_download_history.appendleft(0)
 
         # Clear screen
         stdscr.clear()
@@ -277,6 +301,65 @@ def display_monitor_graph(stdscr):
             curses.color_pair(7),
         )
 
+        # Draw network bandwidth graphs
+        net_y_start = disk_y_start + 9
+
+        # Network upload graph
+        max_upload = (
+            max(network_upload_history) if max(network_upload_history) > 0 else 10
+        )
+        # Round up to nearest 5 or 10 for better scale
+        if max_upload < 1:
+            upload_scale = 1
+        elif max_upload < 5:
+            upload_scale = 5
+        elif max_upload < 10:
+            upload_scale = 10
+        elif max_upload < 50:
+            upload_scale = int((max_upload // 10 + 1) * 10)
+        else:
+            upload_scale = int((max_upload // 50 + 1) * 50)
+
+        draw_graph(
+            stdscr,
+            net_y_start,
+            5,
+            graph_width,
+            6,
+            network_upload_history,
+            f"Network Upload (MB/s) - Max: {upload_scale:.1f} MB/s",
+            curses.color_pair(2),
+            upload_scale,
+        )
+
+        # Network download graph
+        max_download = (
+            max(network_download_history) if max(network_download_history) > 0 else 10
+        )
+        # Round up to nearest 5 or 10 for better scale
+        if max_download < 1:
+            download_scale = 1
+        elif max_download < 5:
+            download_scale = 5
+        elif max_download < 10:
+            download_scale = 10
+        elif max_download < 50:
+            download_scale = int((max_download // 10 + 1) * 10)
+        else:
+            download_scale = int((max_download // 50 + 1) * 50)
+
+        draw_graph(
+            stdscr,
+            net_y_start + 9,
+            5,
+            graph_width,
+            6,
+            network_download_history,
+            f"Network Download (MB/s) - Max: {download_scale:.1f} MB/s",
+            curses.color_pair(3),
+            download_scale,
+        )
+
         # Refresh screen
         stdscr.refresh()
 
@@ -334,6 +417,7 @@ def display_monitor(stdscr):
         gpu_info = monitor.get_gpu_info()
         memory_info = monitor.get_memory_info()
         disk_info = monitor.get_disk_io_info()
+        network_info = monitor.get_network_info()
 
         # Display CPU information
         stdscr.addstr(2, 0, "CPU INFORMATION", curses.A_BOLD)
@@ -553,6 +637,60 @@ def display_monitor(stdscr):
                         disk_y += 1
         else:
             safe_addstr(stdscr, disk_y, 0, f"Status: {disk_info['status']}")
+
+        # Display network information
+        net_y = disk_y + 2
+        stdscr.addstr(net_y, 0, "NETWORK", curses.A_BOLD)
+        net_y += 1
+
+        if "error" not in network_info:
+            # Display total bandwidth
+            total_sent_mb = network_info["total_bytes_sent_per_sec"] / (1024**2)
+            total_recv_mb = network_info["total_bytes_recv_per_sec"] / (1024**2)
+
+            safe_addstr(stdscr, net_y, 0, f"Total Upload: {total_sent_mb:.2f} MB/s")
+            net_y += 1
+            safe_addstr(stdscr, net_y, 0, f"Total Download: {total_recv_mb:.2f} MB/s")
+            net_y += 1
+
+            # Display active interfaces
+            active_interfaces = [
+                name
+                for name, info in network_info["interfaces"].items()
+                if info["status"] == "up"
+            ]
+
+            if active_interfaces:
+                safe_addstr(stdscr, net_y, 0, "Active Interfaces:")
+                net_y += 1
+
+                # Show first 3 active interfaces to avoid screen overflow
+                for interface_name in active_interfaces[:3]:
+                    interface = network_info["interfaces"][interface_name]
+
+                    sent_kb = interface["bytes_sent_per_sec"] / 1024
+                    recv_kb = interface["bytes_recv_per_sec"] / 1024
+
+                    # Determine color based on activity
+                    if sent_kb > 100 or recv_kb > 100:  # >100 KB/s
+                        color = curses.color_pair(2)  # Yellow (active)
+                    elif sent_kb > 10 or recv_kb > 10:  # >10 KB/s
+                        color = curses.color_pair(1)  # Green (moderate)
+                    else:
+                        color = curses.A_NORMAL  # Normal (low activity)
+
+                    safe_addstr(
+                        stdscr,
+                        net_y,
+                        0,
+                        f"{interface_name}: ↑{sent_kb:.1f} KB/s ↓{recv_kb:.1f} KB/s",
+                        color,
+                    )
+                    net_y += 1
+            else:
+                safe_addstr(stdscr, net_y, 0, "No active network interfaces")
+        else:
+            safe_addstr(stdscr, net_y, 0, f"Network Error: {network_info['error']}")
 
         # Refresh the screen
         stdscr.refresh()

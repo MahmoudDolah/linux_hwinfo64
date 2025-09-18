@@ -28,6 +28,13 @@ class SystemMonitor:
             self._get_amd_gpu_path() if self.gpu_type == "amd" else None
         )
 
+        # Network monitoring initialization
+        self._last_net_io = {}
+        self._last_net_time = 0
+        self._net_interface_cache = {}
+        self._net_interface_cache_time = 0
+        self._net_interface_cache_ttl = 30  # Cache interface info for 30 seconds
+
     def _get_amd_gpu_path(self):
         """
         Find the AMD GPU device path using globbing with caching.
@@ -369,6 +376,121 @@ class SystemMonitor:
             "used": memory.used,
             "free": memory.free,
         }
+
+    def get_network_info(self):
+        """Get network interface information with bandwidth calculation"""
+        try:
+            current_time = time.time()
+            net_io = psutil.net_io_counters(pernic=True)
+
+            # Get interface stats (cached)
+            interface_stats = self._get_interface_stats()
+
+            result = {
+                "interfaces": {},
+                "total_bytes_sent_per_sec": 0,
+                "total_bytes_recv_per_sec": 0,
+                "active_interfaces": 0,
+            }
+
+            for interface, stats in net_io.items():
+                # Get interface status
+                if_stat = interface_stats.get(interface)
+                is_up = if_stat.isup if if_stat else False
+
+                # Skip loopback and down interfaces for bandwidth calculations
+                if interface == "lo" or not is_up:
+                    continue
+
+                interface_info = {
+                    "bytes_sent": stats.bytes_sent,
+                    "bytes_recv": stats.bytes_recv,
+                    "packets_sent": stats.packets_sent,
+                    "packets_recv": stats.packets_recv,
+                    "errors_in": stats.errin,
+                    "errors_out": stats.errout,
+                    "drops_in": stats.dropin,
+                    "drops_out": stats.dropout,
+                    "bytes_sent_per_sec": 0,
+                    "bytes_recv_per_sec": 0,
+                    "status": "up" if is_up else "down",
+                    "speed_mbps": if_stat.speed if if_stat else 0,
+                    "mtu": if_stat.mtu if if_stat else 0,
+                }
+
+                # Calculate bandwidth if we have previous data
+                if (
+                    interface in self._last_net_io
+                    and self._last_net_time > 0
+                    and current_time > self._last_net_time
+                ):
+                    time_delta = current_time - self._last_net_time
+                    last_stats = self._last_net_io[interface]
+
+                    # Calculate bytes per second
+                    bytes_sent_delta = stats.bytes_sent - last_stats.bytes_sent
+                    bytes_recv_delta = stats.bytes_recv - last_stats.bytes_recv
+
+                    # Ensure positive values (handle counter wraps)
+                    if bytes_sent_delta >= 0 and bytes_recv_delta >= 0:
+                        interface_info["bytes_sent_per_sec"] = int(
+                            bytes_sent_delta / time_delta
+                        )
+                        interface_info["bytes_recv_per_sec"] = int(
+                            bytes_recv_delta / time_delta
+                        )
+
+                        result["total_bytes_sent_per_sec"] += interface_info[
+                            "bytes_sent_per_sec"
+                        ]
+                        result["total_bytes_recv_per_sec"] += interface_info[
+                            "bytes_recv_per_sec"
+                        ]
+
+                result["interfaces"][interface] = interface_info
+                result["active_interfaces"] += 1
+
+            # Store current stats for next calculation
+            self._last_net_io = dict(net_io)
+            self._last_net_time = current_time
+
+            return result
+
+        except Exception as e:
+            logging.error(f"Error getting network info: {e}")
+            return {
+                "interfaces": {},
+                "total_bytes_sent_per_sec": 0,
+                "total_bytes_recv_per_sec": 0,
+                "active_interfaces": 0,
+                "error": str(e),
+            }
+
+    def _get_interface_stats(self):
+        """Get network interface statistics with caching"""
+        current_time = time.time()
+
+        # Check cache
+        if (
+            current_time - self._net_interface_cache_time
+            < self._net_interface_cache_ttl
+            and self._net_interface_cache
+        ):
+            return self._net_interface_cache
+
+        try:
+            # Get fresh interface stats
+            net_if_stats = psutil.net_if_stats()
+
+            # Update cache
+            self._net_interface_cache = net_if_stats
+            self._net_interface_cache_time = current_time
+
+            return net_if_stats
+
+        except Exception as e:
+            logging.error(f"Error getting interface stats: {e}")
+            return {}
 
     def get_disk_io_info(self):
         """Get disk I/O information"""
