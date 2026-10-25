@@ -424,9 +424,10 @@ def display_monitor(stdscr):
         network_info = monitor.get_network_info()
 
         # Display CPU information
-        stdscr.addstr(2, 0, "CPU INFORMATION", curses.A_BOLD)
+        safe_addstr(stdscr, 2, 0, "CPU INFORMATION", curses.A_BOLD)
         safe_addstr(stdscr, 3, 0, f"Model: {cpu_info['name']}")
-        stdscr.addstr(
+        safe_addstr(
+            stdscr,
             4,
             0,
             f"Cores: {cpu_info['physical_count']} Physical, {cpu_info['count']} Logical",
@@ -435,12 +436,12 @@ def display_monitor(stdscr):
         if cpu_info["freq"]:
             current_freq = cpu_info["freq"].current
             max_freq = cpu_info["freq"].max if cpu_info["freq"].max else current_freq
-            stdscr.addstr(
-                5, 0, f"Frequency: {current_freq:.2f} MHz / {max_freq:.2f} MHz"
+            safe_addstr(
+                stdscr, 5, 0, f"Frequency: {current_freq:.2f} MHz / {max_freq:.2f} MHz"
             )
 
         # Display CPU usage per core
-        stdscr.addstr(7, 0, "CPU Usage per Core:")
+        safe_addstr(stdscr, 7, 0, "CPU Usage per Core:")
         for i, usage in enumerate(cpu_info["usage_percent"]):
             y_pos = 8 + i
             bar_length = int(usage / 2)  # Scale to fit terminal
@@ -453,14 +454,14 @@ def display_monitor(stdscr):
             else:
                 color = curses.color_pair(3)  # Red
 
-            stdscr.addstr(y_pos, 0, f"Core {i}: {usage:5.1f}% [")
-            stdscr.addstr(y_pos, 15, "#" * bar_length, color)
-            stdscr.addstr(y_pos, 15 + bar_length, " " * (50 - bar_length))
-            stdscr.addstr(y_pos, 65, "]")
+            safe_addstr(stdscr, y_pos, 0, f"Core {i}: {usage:5.1f}% [")
+            safe_addstr(stdscr, y_pos, 15, "#" * bar_length, color)
+            safe_addstr(stdscr, y_pos, 15 + bar_length, " " * (50 - bar_length))
+            safe_addstr(stdscr, y_pos, 65, "]")
 
         # Display CPU temperature
         y_pos = 8 + len(cpu_info["usage_percent"]) + 1
-        stdscr.addstr(y_pos, 0, "CPU Temperatures:")
+        safe_addstr(stdscr, y_pos, 0, "CPU Temperatures:")
         temp_y = y_pos + 1
 
         if cpu_info["temps"]:
@@ -475,20 +476,20 @@ def display_monitor(stdscr):
                 safe_addstr(stdscr, temp_y, 20, f"{temp:.1f}°C", color)
                 temp_y += 1
         else:
-            stdscr.addstr(temp_y, 0, "Temperature data not available")
+            safe_addstr(stdscr, temp_y, 0, "Temperature data not available")
             temp_y += 1
 
         # Display GPU information
         gpu_y = temp_y + 1
-        stdscr.addstr(gpu_y, 0, "GPU INFORMATION", curses.A_BOLD)
+        safe_addstr(stdscr, gpu_y, 0, "GPU INFORMATION", curses.A_BOLD)
         gpu_y += 1
 
         if "status" in gpu_info:
-            stdscr.addstr(gpu_y, 0, gpu_info["status"])
+            safe_addstr(stdscr, gpu_y, 0, gpu_info["status"])
             gpu_y += 1
         else:
             gpu_type = gpu_info.get("type", "Unknown")
-            stdscr.addstr(gpu_y, 0, f"Type: {gpu_type}")
+            safe_addstr(stdscr, gpu_y, 0, f"Type: {gpu_type}")
             gpu_y += 1
 
             safe_addstr(stdscr, gpu_y, 0, f"Model: {gpu_info['name']}")
@@ -503,8 +504,8 @@ def display_monitor(stdscr):
                     color = curses.color_pair(2)  # Yellow
                 else:
                     color = curses.color_pair(3)  # Red
-                stdscr.addstr(gpu_y, 0, "Temperature: ", curses.A_BOLD)
-                stdscr.addstr(gpu_y, 13, f"{temp:.1f}°C", color)
+                safe_addstr(stdscr, gpu_y, 0, "Temperature: ", curses.A_BOLD)
+                safe_addstr(stdscr, gpu_y, 13, f"{temp:.1f}°C", color)
                 gpu_y += 1
 
             # GPU Utilization if available
@@ -517,10 +518,10 @@ def display_monitor(stdscr):
                     color = curses.color_pair(2)  # Yellow
                 else:
                     color = curses.color_pair(3)  # Red
-                stdscr.addstr(gpu_y, 0, f"GPU Usage: {util:5.1f}% [")
-                stdscr.addstr(gpu_y, 16, "#" * bar_length, color)
-                stdscr.addstr(gpu_y, 16 + bar_length, " " * (50 - bar_length))
-                stdscr.addstr(gpu_y, 66, "]")
+                safe_addstr(stdscr, gpu_y, 0, f"GPU Usage: {util:5.1f}% [")
+                safe_addstr(stdscr, gpu_y, 16, "#" * bar_length, color)
+                safe_addstr(stdscr, gpu_y, 16 + bar_length, " " * (50 - bar_length))
+                safe_addstr(stdscr, gpu_y, 66, "]")
                 gpu_y += 1
 
             # Memory if available
@@ -537,24 +538,27 @@ def display_monitor(stdscr):
                 else:
                     color = curses.color_pair(3)  # Red
 
-                stdscr.addstr(
+                safe_addstr(
+                    stdscr,
                     gpu_y,
                     0,
                     f"VRAM: {mem_used:.0f}MB / {mem_total:.0f}MB [{mem_percent:5.1f}%] [",
                 )
-                stdscr.addstr(gpu_y, 38, "#" * bar_length, color)
-                stdscr.addstr(gpu_y, 38 + bar_length, " " * (50 - bar_length))
-                stdscr.addstr(gpu_y, 88, "]")
+                safe_addstr(stdscr, gpu_y, 38, "#" * bar_length, color)
+                safe_addstr(stdscr, gpu_y, 38 + bar_length, " " * (50 - bar_length))
+                safe_addstr(stdscr, gpu_y, 88, "]")
                 gpu_y += 1
 
             # Power draw if available
             if "power_draw" in gpu_info and gpu_info["power_draw"] > 0:
-                stdscr.addstr(gpu_y, 0, f"Power Draw: {gpu_info['power_draw']:.2f}W")
+                safe_addstr(
+                    stdscr, gpu_y, 0, f"Power Draw: {gpu_info['power_draw']:.2f}W"
+                )
                 gpu_y += 1
 
         # Display system memory
         mem_y = gpu_y + 1
-        stdscr.addstr(mem_y, 0, "SYSTEM MEMORY", curses.A_BOLD)
+        safe_addstr(stdscr, mem_y, 0, "SYSTEM MEMORY", curses.A_BOLD)
         mem_y += 1
 
         mem_used = memory_info["used"] / (1024**3)  # Convert to GB
@@ -569,18 +573,19 @@ def display_monitor(stdscr):
         else:
             color = curses.color_pair(3)  # Red
 
-        stdscr.addstr(
+        safe_addstr(
+            stdscr,
             mem_y,
             0,
             f"RAM: {mem_used:.1f}GB / {mem_total:.1f}GB [{mem_percent:5.1f}%] [",
         )
-        stdscr.addstr(mem_y, 36, "#" * bar_length, color)
-        stdscr.addstr(mem_y, 36 + bar_length, " " * (50 - bar_length))
-        stdscr.addstr(mem_y, 86, "]")
+        safe_addstr(stdscr, mem_y, 36, "#" * bar_length, color)
+        safe_addstr(stdscr, mem_y, 36 + bar_length, " " * (50 - bar_length))
+        safe_addstr(stdscr, mem_y, 86, "]")
 
         # Display disk I/O information
         disk_y = mem_y + 2
-        stdscr.addstr(disk_y, 0, "DISK I/O", curses.A_BOLD)
+        safe_addstr(stdscr, disk_y, 0, "DISK I/O", curses.A_BOLD)
         disk_y += 1
 
         if "status" not in disk_info:
@@ -589,13 +594,15 @@ def display_monitor(stdscr):
             read_mb = total_io["read_bytes"] / (1024**2)
             write_mb = total_io["write_bytes"] / (1024**2)
 
-            stdscr.addstr(
+            safe_addstr(
+                stdscr,
                 disk_y,
                 0,
                 f"Total Read: {read_mb:.1f} MB ({total_io['read_count']} ops)",
             )
             disk_y += 1
-            stdscr.addstr(
+            safe_addstr(
+                stdscr,
                 disk_y,
                 0,
                 f"Total Write: {write_mb:.1f} MB ({total_io['write_count']} ops)",
@@ -604,7 +611,7 @@ def display_monitor(stdscr):
 
             # Display disk usage for main filesystems
             if disk_info["usage"]:
-                stdscr.addstr(disk_y, 0, "Disk Usage:")
+                safe_addstr(stdscr, disk_y, 0, "Disk Usage:")
                 disk_y += 1
 
                 # Show only the first 3 disks to avoid screen overflow
@@ -635,9 +642,11 @@ def display_monitor(stdscr):
                             0,
                             f"{device_name}: {used_gb:.1f}GB / {total_gb:.1f}GB [{percent:5.1f}%] [",
                         )
-                        stdscr.addstr(disk_y, 36, "#" * bar_length, color)
-                        stdscr.addstr(disk_y, 36 + bar_length, " " * (50 - bar_length))
-                        stdscr.addstr(disk_y, 86, "]")
+                        safe_addstr(stdscr, disk_y, 36, "#" * bar_length, color)
+                        safe_addstr(
+                            stdscr, disk_y, 36 + bar_length, " " * (50 - bar_length)
+                        )
+                        safe_addstr(stdscr, disk_y, 86, "]")
                         disk_y += 1
         else:
             safe_addstr(stdscr, disk_y, 0, f"Status: {disk_info['status']}")
@@ -695,6 +704,17 @@ def display_monitor(stdscr):
                 safe_addstr(stdscr, net_y, 0, "No active network interfaces")
         else:
             safe_addstr(stdscr, net_y, 0, f"Network Error: {network_info['error']}")
+
+        # Let the user know when sections were cut off by a short terminal
+        max_y, _ = stdscr.getmaxyx()
+        if net_y >= max_y:
+            safe_addstr(
+                stdscr,
+                max_y - 1,
+                0,
+                f"-- {net_y - max_y + 1} more lines, enlarge terminal to see all --",
+                curses.A_REVERSE,
+            )
 
         # Refresh the screen
         stdscr.refresh()

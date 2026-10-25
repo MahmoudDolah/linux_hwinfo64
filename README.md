@@ -124,7 +124,7 @@ AMD GPU metrics availability depends on your specific hardware and drivers:
 - **Device Detection**: Automatically handles multiple GPU cards
 
 ### System Requirements
-- **Minimum Terminal**: 80x25 for standard mode, 100x35 for graph mode. Graph mode skips graphs that don't fit, so all of them (including network) need roughly 60-70 rows depending on which GPU metrics are available
+- **Minimum Terminal**: 80x25 for standard mode, 100x35 for graph mode. Standard mode cuts off sections that don't fit and shows how many lines are hidden (around 50 rows shows everything on a 12-thread CPU). Graph mode skips graphs that don't fit, so all of them (including network) need roughly 60-70 rows depending on which GPU metrics are available
 - **Permissions**: Some GPU metrics may require elevated permissions
 - **Dependencies**: Works with standard Linux utilities, enhanced with GPU tools
 
