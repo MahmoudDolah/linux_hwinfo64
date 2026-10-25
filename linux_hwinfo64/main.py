@@ -2,6 +2,7 @@ import time
 import curses
 import logging
 import argparse
+import os
 import math
 import collections
 from datetime import datetime
@@ -23,13 +24,31 @@ def safe_addstr(stdscr, y, x, text, attr=curses.A_NORMAL):
         pass
 
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    filename="hw_monitor.log",
-    filemode="a",
-)
+def get_log_path():
+    """Log file location, following the XDG base directory spec"""
+    state_home = os.environ.get("XDG_STATE_HOME") or os.path.expanduser(
+        "~/.local/state"
+    )
+    return os.path.join(state_home, "linux-hwinfo64", "hw_monitor.log")
+
+
+def setup_logging():
+    """Log to a file in the user's state directory. Returns the path, or None"""
+    log_path = get_log_path()
+    try:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            filename=log_path,
+            filemode="a",
+        )
+        return log_path
+    except OSError:
+        # Without a handler, logging would print warnings to stderr and
+        # draw over the curses display, so drop log output instead
+        logging.getLogger().addHandler(logging.NullHandler())
+        return None
 
 
 def format_axis_label(value, unit):
@@ -726,7 +745,12 @@ def display_monitor(stdscr):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Linux Hardware Monitor")
+    log_path = setup_logging()
+
+    parser = argparse.ArgumentParser(
+        description="Linux Hardware Monitor",
+        epilog=f"Logs are written to {get_log_path()}",
+    )
     parser.add_argument(
         "--graph", "-g", action="store_true", help="Show graphical display mode"
     )
@@ -903,7 +927,8 @@ def main():
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
         print(f"Error: {e}")
-        print("Check hw_monitor.log for details.")
+        if log_path:
+            print(f"Check {log_path} for details.")
 
 
 if __name__ == "__main__":

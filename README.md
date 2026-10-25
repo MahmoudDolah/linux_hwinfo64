@@ -112,7 +112,7 @@ CI (`.github/workflows/python-package.yml`) lints, smoke-tests and build-checks 
 3. The workflow builds the package, verifies it installs, and uploads it to PyPI via Trusted Publishing
 
 ### Logging
-The application logs GPU detection issues and errors to `hw_monitor.log` for debugging.
+The application logs GPU detection issues and errors to `~/.local/state/linux-hwinfo64/hw_monitor.log` (or `$XDG_STATE_HOME/linux-hwinfo64/` if set) for debugging. `--help` shows the exact path.
 
 ## Compatibility Notes
 
