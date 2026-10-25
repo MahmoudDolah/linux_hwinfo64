@@ -14,10 +14,14 @@ wheels = [
 [[package]]
 name = "linux-hwinfo64"
 version = "0.1.4"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "distro" },
     { name = "psutil" },
+]
+
+[package.dev-dependencies]
+dev = [
     { name = "ruff" },
 ]
 
@@ -25,8 +29,10 @@ dependencies = [
 requires-dist = [
     { name = "distro", specifier = ">=1.6.0" },
     { name = "psutil", specifier = ">=7.0.0" },
-    { name = "ruff", specifier = ">=0.11.10" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.11.10" }]
 
 [[package]]
 name = "psutil"

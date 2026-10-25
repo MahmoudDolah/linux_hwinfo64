@@ -25,11 +25,19 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
   - ROCm support for detailed metrics
   - Sysfs fallback for basic utilization
 
+## Installation
+
+Install from [PyPI](https://pypi.org/project/linux-hwinfo64/) as a standalone tool:
+
+```bash
+pipx install linux-hwinfo64     # or: uv tool install linux-hwinfo64
+linux-hwinfo64 --graph
+```
+
 ## Requirements
 
 ### Core Dependencies
-- Python 3.10+ with psutil
-- ruff (for code formatting/linting)
+- Python 3.10+ with psutil and distro
 
 ### GPU Support (Optional)
 - **NVIDIA GPUs**: `nvidia-smi` command-line tool
@@ -38,6 +46,7 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
 ## Usage
 
 ### Running the Application
+From an installed package, use the `linux-hwinfo64` command with the same arguments. From a source checkout:
 ```bash
 uv run main.py                   # Standard monitoring mode
 uv run main.py --graph           # Graph mode with historical data
@@ -60,9 +69,9 @@ Real-time line graphs showing 2-minute historical data:
 - GPU memory usage trends (if available)
 - Disk usage monitoring
 
-![Screenshot of tool running in graph mode](assets/graph-view.png)
+![Screenshot of tool running in graph mode](https://raw.githubusercontent.com/MahmoudDolah/linux_hwinfo64/main/assets/graph-view.png)
 
-![Screenshot of the tool running in the terminal](assets/linux_hw_monitor_screenshot.png)
+![Screenshot of the tool running in the terminal](https://raw.githubusercontent.com/MahmoudDolah/linux_hwinfo64/main/assets/linux_hw_monitor_screenshot.png)
 
 ## Technical Implementation
 
@@ -88,9 +97,17 @@ Real-time line graphs showing 2-minute historical data:
 
 ### Code Quality
 ```bash
+uv sync                 # Install dependencies, including the dev group (ruff)
 uv run ruff check .     # Lint code
 uv run ruff format .    # Format code
 ```
+
+### Releasing
+CI (`.github/workflows/python-package.yml`) lints, smoke-tests and build-checks every push and PR to `main`. Publishing to PyPI is handled by `.github/workflows/python-publish.yml`:
+
+1. Bump `version` in `pyproject.toml` and merge to `main`
+2. Create a GitHub Release with a tag matching that version (e.g. `v0.1.4`)
+3. The workflow builds the package, verifies it installs, and uploads it to PyPI via Trusted Publishing
 
 ### Logging
 The application logs GPU detection issues and errors to `hw_monitor.log` for debugging.
