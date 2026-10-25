@@ -1,5 +1,4 @@
-# This workflow will install Python dependencies and run linting
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# Lint, smoke-test, and build-check the package on every push and PR to main
 
 name: Python package
 
@@ -15,33 +14,62 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+    # Passing python-version sets UV_PYTHON, which overrides the .python-version
+    # pin so each matrix entry really runs on its own interpreter
+    - name: Install uv and Python ${{ matrix.python-version }}
+      uses: astral-sh/setup-uv@v6
       with:
         python-version: ${{ matrix.python-version }}
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
         enable-cache: true
 
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --locked
+
+    - name: Confirm Python version
+      run: uv run python -c "import sys; assert sys.version.startswith('${{ matrix.python-version }}.'), sys.version"
 
     - name: Lint with ruff
-      run: |
-        uv run ruff check .
+      run: uv run ruff check .
 
     - name: Format check with ruff
-      run: |
-        uv run ruff format --check .
+      run: uv run ruff format --check .
 
-    - name: Run application smoke test
+    - name: Smoke test CLI
       run: |
-        # Test that the application can import and display help
-        timeout 5s uv run python main.py --help || true
+        uv run main.py --help
+        uv run linux-hwinfo64 --neofetch
+        # Record for a few seconds, then stop with SIGINT like a user pressing Ctrl+C
+        timeout --preserve-status -s INT 5s uv run linux-hwinfo64 --record -o "$RUNNER_TEMP/metrics.csv"
+        test "$(wc -l < "$RUNNER_TEMP/metrics.csv")" -ge 2
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Build distributions
+      run: uv build
+
+    - name: Verify wheel contents
+      run: |
+        unzip -l dist/*.whl
+        unzip -l dist/*.whl | grep -q "linux_hwinfo64/main.py"
+        unzip -l dist/*.whl | grep -q "linux_hwinfo64/system_monitor.py"
+        unzip -l dist/*.whl | grep -q "entry_points.txt"
+
+    - name: Install wheel in a clean environment and run it
+      run: |
+        uv venv "$RUNNER_TEMP/venv"
+        uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+        cd "$RUNNER_TEMP"
+        "$RUNNER_TEMP/venv/bin/linux-hwinfo64" --help
+        "$RUNNER_TEMP/venv/bin/linux-hwinfo64" --neofetch
