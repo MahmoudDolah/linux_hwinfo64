@@ -556,6 +556,20 @@ def display_monitor(stdscr):
                 )
                 gpu_y += 1
 
+            # Core clock and fan speed if available (AMD sysfs)
+            if "core_clock_mhz" in gpu_info:
+                safe_addstr(
+                    stdscr,
+                    gpu_y,
+                    0,
+                    f"Core Clock: {gpu_info['core_clock_mhz']:.0f} MHz",
+                )
+                gpu_y += 1
+
+            if "fan_rpm" in gpu_info:
+                safe_addstr(stdscr, gpu_y, 0, f"Fan: {gpu_info['fan_rpm']:.0f} RPM")
+                gpu_y += 1
+
         # Display system memory
         mem_y = gpu_y + 1
         safe_addstr(stdscr, mem_y, 0, "SYSTEM MEMORY", curses.A_BOLD)

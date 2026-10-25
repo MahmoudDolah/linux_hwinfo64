@@ -23,7 +23,8 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
 - **AMD**: Multi-layer detection system:
   - Vendor ID checking via `/sys/class/drm/card*/device/vendor`
   - lspci fallback detection
-  - ROCm support for detailed metrics
+  - Reads VRAM usage, temperature, power, fan speed and core clock straight from the amdgpu driver's sysfs files, no extra tools needed
+  - ROCm (`rocm-smi`) as a fallback for VRAM usage
   - Sysfs fallback for basic utilization
 
 ## Installation
@@ -42,7 +43,7 @@ linux-hwinfo64 --graph
 
 ### GPU Support (Optional)
 - **NVIDIA GPUs**: `nvidia-smi` command-line tool
-- **AMD GPUs**: `rocm-smi` for detailed metrics (basic support works without)
+- **AMD GPUs**: Nothing extra with the amdgpu driver. `rocm-smi` is only used as a fallback for VRAM usage
 
 ## Usage
 
@@ -88,7 +89,7 @@ Real-time line graphs showing 2-minute historical data:
 2. **AMD Detection**: Multi-layered approach:
    - Primary: Vendor ID verification via sysfs
    - Secondary: lspci parsing for device identification
-   - Metrics: ROCm tools for detailed info, sysfs fallback for basic usage
+   - Metrics: amdgpu sysfs files (`mem_info_vram_*`, `gpu_busy_percent`, the card's `hwmon` sensors), rocm-smi fallback for VRAM
 
 ### Performance Features
 - **Efficient Polling**: 1-second refresh rate with minimal system impact
@@ -119,7 +120,8 @@ The application logs GPU detection issues and errors to `hw_monitor.log` for deb
 ### AMD GPU Support
 AMD GPU metrics availability depends on your specific hardware and drivers:
 - **Temperature**: Varies by card model and hwmon support
-- **Memory Usage**: Requires ROCm tools for detailed metrics
+- **Memory Usage**: Read from `mem_info_vram_used`/`mem_info_vram_total`, falls back to ROCm tools if those aren't available
+- **Power, Fan, Clock**: Read from the card's hwmon sensors, availability varies by card and kernel version
 - **GPU Utilization**: May not be available on older cards/drivers
 - **Device Detection**: Automatically handles multiple GPU cards
 

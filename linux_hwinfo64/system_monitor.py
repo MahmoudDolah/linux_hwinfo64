@@ -230,69 +230,39 @@ class SystemMonitor:
                 logging.warning(f"Failed to get AMD GPU name via lspci: {e}")
                 gpu_info["name"] = "AMD GPU"
 
-            # Try to read temperature
-            try:
-                # Different AMD cards might use different paths
-                temp_paths = []
-                if self._amd_gpu_device_path:
-                    temp_paths = [
-                        os.path.join(
-                            self._amd_gpu_device_path, "hwmon/hwmon*/temp1_input"
-                        ),
-                        "/sys/class/hwmon/hwmon*/temp1_input",
-                    ]
+            # Read temperature, power, fan and clock from the card's hwmon
+            # sensors. Only the card's own hwmon is used, since the first
+            # entry under /sys/class/hwmon can be the CPU or an NVMe drive
+            temp = self._read_amd_sysfs_value("hwmon/hwmon*/temp1_input")
+            if temp is not None:
+                gpu_info["temperature"] = temp / 1000  # millidegrees to degrees
+            else:
+                logging.debug("No temperature file found for AMD GPU")
 
-                temp_value = None
-                for path_pattern in temp_paths:
-                    matching_paths = glob.glob(path_pattern)
-                    if matching_paths:
-                        with open(matching_paths[0], "r") as f:
-                            temp_value = (
-                                int(f.read().strip()) / 1000
-                            )  # Convert from millidegrees to degrees
-                            break
+            # Newer kernels/cards report power1_input instead of power1_average
+            power = self._read_amd_sysfs_value("hwmon/hwmon*/power1_average")
+            if power is None:
+                power = self._read_amd_sysfs_value("hwmon/hwmon*/power1_input")
+            if power is not None:
+                gpu_info["power_draw"] = power / 1_000_000  # microwatts to watts
 
-                if temp_value is not None:
-                    gpu_info["temperature"] = temp_value
-                else:
-                    logging.debug("No temperature file found for AMD GPU")
-            except (IOError, ValueError) as e:
-                logging.warning(f"Failed to read AMD GPU temperature: {e}")
+            fan = self._read_amd_sysfs_value("hwmon/hwmon*/fan1_input")
+            if fan is not None:
+                gpu_info["fan_rpm"] = fan
 
-            # Try to get memory info using rocm-smi if available
-            try:
-                rocm_output = subprocess.check_output(
-                    ["rocm-smi", "--showmeminfo", "vram"], universal_newlines=True
-                )
+            clock = self._read_amd_sysfs_value("hwmon/hwmon*/freq1_input")
+            if clock is not None:
+                gpu_info["core_clock_mhz"] = clock / 1_000_000  # Hz to MHz
 
-                total_memory_match = re.search(
-                    r"VRAM Total Memory \(B\): (\d+)", rocm_output
-                )
-                used_memory_match = re.search(
-                    r"VRAM Total Used Memory \(B\): (\d+)", rocm_output
-                )
-
-                total_memory_mb = 0
-                used_memory_mb = 0
-
-                if total_memory_match and used_memory_match:
-                    total_memory_bytes = int(total_memory_match.group(1))
-                    used_memory_bytes = int(used_memory_match.group(1))
-
-                    # Convert to MB for easier reading
-                    total_memory_mb = total_memory_bytes / (1024 * 1024)
-                    used_memory_mb = used_memory_bytes / (1024 * 1024)
-
-                if total_memory_mb > 0 and used_memory_mb > 0:
-                    gpu_info["memory_used"] = used_memory_mb
-                    gpu_info["memory_total"] = total_memory_mb
-                    gpu_info["memory_utilization"] = (
-                        gpu_info["memory_used"] / gpu_info["memory_total"]
-                    ) * 100
-                else:
-                    logging.debug("Memory information not found in rocm-smi output")
-            except (subprocess.SubprocessError, FileNotFoundError) as e:
-                logging.debug(f"rocm-smi not available or failed: {e}")
+            # Read VRAM usage from sysfs, falling back to rocm-smi
+            vram_used = self._read_amd_sysfs_value("mem_info_vram_used")
+            vram_total = self._read_amd_sysfs_value("mem_info_vram_total")
+            if vram_used is not None and vram_total:
+                gpu_info["memory_used"] = vram_used / (1024 * 1024)
+                gpu_info["memory_total"] = vram_total / (1024 * 1024)
+                gpu_info["memory_utilization"] = (vram_used / vram_total) * 100
+            else:
+                self._add_rocm_smi_memory_info(gpu_info)
 
             # Try to read GPU utilization
             try:
@@ -318,6 +288,64 @@ class SystemMonitor:
         except Exception as e:
             logging.error(f"Error fetching AMD GPU info: {e}")
             return {"status": f"Error fetching AMD GPU info: {str(e)}"}
+
+    def _read_amd_sysfs_value(self, relative_path):
+        """
+        Read a numeric value from a file under the AMD GPU device path.
+        relative_path may contain a glob (e.g. "hwmon/hwmon*/temp1_input").
+        Returns the value as a float, or None if unavailable.
+        """
+        if not self._amd_gpu_device_path:
+            return None
+
+        matching_paths = glob.glob(
+            os.path.join(self._amd_gpu_device_path, relative_path)
+        )
+        if not matching_paths:
+            return None
+
+        try:
+            with open(matching_paths[0], "r") as f:
+                return float(f.read().strip())
+        except (IOError, ValueError) as e:
+            logging.debug(f"Failed to read {matching_paths[0]}: {e}")
+            return None
+
+    def _add_rocm_smi_memory_info(self, gpu_info):
+        """Add VRAM usage from rocm-smi to gpu_info, if rocm-smi is available"""
+        try:
+            rocm_output = subprocess.check_output(
+                ["rocm-smi", "--showmeminfo", "vram"], universal_newlines=True
+            )
+
+            total_memory_match = re.search(
+                r"VRAM Total Memory \(B\): (\d+)", rocm_output
+            )
+            used_memory_match = re.search(
+                r"VRAM Total Used Memory \(B\): (\d+)", rocm_output
+            )
+
+            total_memory_mb = 0
+            used_memory_mb = 0
+
+            if total_memory_match and used_memory_match:
+                total_memory_bytes = int(total_memory_match.group(1))
+                used_memory_bytes = int(used_memory_match.group(1))
+
+                # Convert to MB for easier reading
+                total_memory_mb = total_memory_bytes / (1024 * 1024)
+                used_memory_mb = used_memory_bytes / (1024 * 1024)
+
+            if total_memory_mb > 0 and used_memory_mb > 0:
+                gpu_info["memory_used"] = used_memory_mb
+                gpu_info["memory_total"] = total_memory_mb
+                gpu_info["memory_utilization"] = (
+                    gpu_info["memory_used"] / gpu_info["memory_total"]
+                ) * 100
+            else:
+                logging.debug("Memory information not found in rocm-smi output")
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            logging.debug(f"rocm-smi not available or failed: {e}")
 
     def _get_gpu_busy_path(self):
         """
