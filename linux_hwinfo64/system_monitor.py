@@ -398,8 +398,8 @@ class SystemMonitor:
                 if_stat = interface_stats.get(interface)
                 is_up = if_stat.isup if if_stat else False
 
-                # Skip loopback and down interfaces for bandwidth calculations
-                if interface == "lo" or not is_up:
+                # Skip virtual and down interfaces for bandwidth calculations
+                if not self._is_physical_interface(interface) or not is_up:
                     continue
 
                 interface_info = {
@@ -465,6 +465,15 @@ class SystemMonitor:
                 "active_interfaces": 0,
                 "error": str(e),
             }
+
+    def _is_physical_interface(self, interface):
+        """
+        Check whether a network interface is backed by real hardware.
+        Virtual interfaces (loopback, docker/bridges, veth, VPN tunnels) have no
+        device link in sysfs, and their traffic also crosses a physical
+        interface, so counting them would double up the totals.
+        """
+        return os.path.exists(os.path.join("/sys/class/net", interface, "device"))
 
     def _get_interface_stats(self):
         """Get network interface statistics with caching"""

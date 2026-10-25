@@ -2,6 +2,7 @@ import time
 import curses
 import logging
 import argparse
+import math
 import collections
 from datetime import datetime
 from linux_hwinfo64.system_monitor import SystemMonitor
@@ -31,8 +32,36 @@ logging.basicConfig(
 )
 
 
+def format_axis_label(value, unit):
+    """Format a y-axis label to fit the 4 columns left of the graph border"""
+    if unit == "%":
+        return f"{int(value):3d}%"
+    if value < 10:
+        return f"{value:4.1f}"
+    return f"{value:4.0f}"
+
+
+def bandwidth_scale(history):
+    """Pick a rounded y-axis maximum (MB/s) that fits the peak in history"""
+    peak = max(history)
+    for limit in (1, 5, 10):
+        if peak <= limit:
+            return limit
+    step = 10 if peak <= 50 else 50
+    return math.ceil(peak / step) * step
+
+
 def draw_graph(
-    stdscr, y_start, x_start, width, height, data, title, color_pair, y_max=100
+    stdscr,
+    y_start,
+    x_start,
+    width,
+    height,
+    data,
+    title,
+    color_pair,
+    y_max=100,
+    unit="%",
 ):
     """Draw a line graph on the screen
 
@@ -44,29 +73,32 @@ def draw_graph(
         title: Graph title
         color_pair: Curses color pair for the graph line
         y_max: Maximum value for y-axis (default: 100%)
+        unit: "%" for percentage labels, anything else for plain numbers
     """
+    # Skip graphs that would run past the bottom of the terminal
+    max_y, _ = stdscr.getmaxyx()
+    if y_start + height + 1 >= max_y:
+        return
+
     # Draw title
-    stdscr.addstr(y_start, x_start, title, curses.A_BOLD)
+    safe_addstr(stdscr, y_start, x_start, title, curses.A_BOLD)
 
     # Draw border
     for i in range(height):
-        stdscr.addstr(y_start + 1 + i, x_start, "|")
-        stdscr.addstr(y_start + 1 + i, x_start + width + 1, "|")
+        safe_addstr(stdscr, y_start + 1 + i, x_start, "|")
+        safe_addstr(stdscr, y_start + 1 + i, x_start + width + 1, "|")
 
-    for i in range(width + 2):
-        stdscr.addstr(y_start + height + 1, x_start + i, "-")
+    safe_addstr(stdscr, y_start + height + 1, x_start, "-" * (width + 2))
 
     # Draw y-axis labels
-    if y_max >= 100:
-        # Use percentage format for values >= 100 (like CPU usage)
-        stdscr.addstr(y_start + 1, x_start - 4, f"{int(y_max):3d}%")
-        stdscr.addstr(y_start + height // 2, x_start - 4, f"{int(y_max // 2):3d}%")
-        stdscr.addstr(y_start + height, x_start - 4, "  0%")
-    else:
-        # Use decimal format for smaller values (like MB/s)
-        stdscr.addstr(y_start + 1, x_start - 4, f"{y_max:4.1f}")
-        stdscr.addstr(y_start + height // 2, x_start - 4, f"{y_max / 2:4.1f}")
-        stdscr.addstr(y_start + height, x_start - 4, " 0.0")
+    safe_addstr(stdscr, y_start + 1, x_start - 4, format_axis_label(y_max, unit))
+    safe_addstr(
+        stdscr,
+        y_start + height // 2,
+        x_start - 4,
+        format_axis_label(y_max / 2, unit),
+    )
+    safe_addstr(stdscr, y_start + height, x_start - 4, format_axis_label(0, unit))
 
     # Plot data points
     data_len = len(data)
@@ -85,7 +117,7 @@ def draw_graph(
             start_y = min(y1, y2)
             end_y = max(y1, y2)
             for y in range(start_y, end_y + 1):
-                stdscr.addstr(y_start + 1 + y, x_start + 1 + x1, "│", color_pair)
+                safe_addstr(stdscr, y_start + 1 + y, x_start + 1 + x1, "│", color_pair)
         else:
             if y1 < y2:
                 char = "╱"
@@ -93,7 +125,7 @@ def draw_graph(
                 char = "╲"
             else:
                 char = "─"
-            stdscr.addstr(y_start + 1 + y1, x_start + 1 + x1, char, color_pair)
+            safe_addstr(stdscr, y_start + 1 + y1, x_start + 1 + x1, char, color_pair)
 
 
 def display_monitor_graph(stdscr):
@@ -114,8 +146,9 @@ def display_monitor_graph(stdscr):
     curses.curs_set(0)  # Hide cursor
     stdscr.timeout(1000)  # Set refresh rate to 1 second
 
-    # Check minimum terminal size (increased for network graphs)
-    min_height, min_width = 55, 100
+    # Check minimum terminal size. Graphs further down (GPU, disk, network)
+    # are skipped by draw_graph when the terminal isn't tall enough for them
+    min_height, min_width = 35, 100
     max_y, max_x = stdscr.getmaxyx()
     if max_y < min_height or max_x < min_width:
         safe_addstr(
@@ -303,23 +336,7 @@ def display_monitor_graph(stdscr):
 
         # Draw network bandwidth graphs
         net_y_start = disk_y_start + 9
-
-        # Network upload graph
-        max_upload = (
-            max(network_upload_history) if max(network_upload_history) > 0 else 10
-        )
-        # Round up to nearest 5 or 10 for better scale
-        if max_upload < 1:
-            upload_scale = 1
-        elif max_upload < 5:
-            upload_scale = 5
-        elif max_upload < 10:
-            upload_scale = 10
-        elif max_upload < 50:
-            upload_scale = int((max_upload // 10 + 1) * 10)
-        else:
-            upload_scale = int((max_upload // 50 + 1) * 50)
-
+        upload_scale = bandwidth_scale(network_upload_history)
         draw_graph(
             stdscr,
             net_y_start,
@@ -327,27 +344,13 @@ def display_monitor_graph(stdscr):
             graph_width,
             6,
             network_upload_history,
-            f"Network Upload (MB/s) - Max: {upload_scale:.1f} MB/s",
+            "Network Upload (MB/s) - Last 2 Minutes",
             curses.color_pair(2),
             upload_scale,
+            unit="MB/s",
         )
 
-        # Network download graph
-        max_download = (
-            max(network_download_history) if max(network_download_history) > 0 else 10
-        )
-        # Round up to nearest 5 or 10 for better scale
-        if max_download < 1:
-            download_scale = 1
-        elif max_download < 5:
-            download_scale = 5
-        elif max_download < 10:
-            download_scale = 10
-        elif max_download < 50:
-            download_scale = int((max_download // 10 + 1) * 10)
-        else:
-            download_scale = int((max_download // 50 + 1) * 50)
-
+        download_scale = bandwidth_scale(network_download_history)
         draw_graph(
             stdscr,
             net_y_start + 9,
@@ -355,9 +358,10 @@ def display_monitor_graph(stdscr):
             graph_width,
             6,
             network_download_history,
-            f"Network Download (MB/s) - Max: {download_scale:.1f} MB/s",
+            "Network Download (MB/s) - Last 2 Minutes",
             curses.color_pair(3),
             download_scale,
+            unit="MB/s",
         )
 
         # Refresh screen
@@ -640,7 +644,7 @@ def display_monitor(stdscr):
 
         # Display network information
         net_y = disk_y + 2
-        stdscr.addstr(net_y, 0, "NETWORK", curses.A_BOLD)
+        safe_addstr(stdscr, net_y, 0, "NETWORK", curses.A_BOLD)
         net_y += 1
 
         if "error" not in network_info:
@@ -765,6 +769,13 @@ def main():
                     ]
                 )
 
+            # Add network fields if available. This first call also sets the
+            # baseline that per-second rates are measured against
+            network_info = monitor.get_network_info()
+            has_network = "error" not in network_info
+            if has_network:
+                header.extend(["net_upload_mbps", "net_download_mbps"])
+
             with open(args.output, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
@@ -819,6 +830,18 @@ def main():
                                     total_io["read_count"],
                                     total_io["write_count"],
                                     primary_disk_usage,
+                                ]
+                            )
+
+                        # Add network bandwidth (MB/s) if available
+                        if has_network:
+                            network_info = monitor.get_network_info()
+                            row.extend(
+                                [
+                                    network_info.get("total_bytes_sent_per_sec", 0)
+                                    / (1024**2),
+                                    network_info.get("total_bytes_recv_per_sec", 0)
+                                    / (1024**2),
                                 ]
                             )
 

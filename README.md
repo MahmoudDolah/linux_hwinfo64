@@ -1,6 +1,6 @@
 # Linux Hardware Monitor
 
-A comprehensive Python-based system monitoring tool for Linux that provides real-time hardware metrics similar to hwinfo64. Features both text-based and graphical interfaces for monitoring CPU, GPU, memory, and disk usage.
+A comprehensive Python-based system monitoring tool for Linux that provides real-time hardware metrics similar to hwinfo64. Features both text-based and graphical interfaces for monitoring CPU, GPU, memory, disk, and network usage.
 
 ## Features
 
@@ -9,6 +9,7 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
 - **GPU Support**: NVIDIA and AMD GPU detection with utilization, memory, temperature, and power draw
 - **Memory Monitoring**: System RAM usage with detailed statistics
 - **Disk I/O**: Real-time disk usage, I/O statistics, and filesystem information
+- **Network**: Upload/download bandwidth, total and per interface (physical interfaces only, so docker/bridge/VPN traffic isn't double counted)
 - **Historical Data**: 2-minute rolling history for all metrics
 
 ### Display Modes
@@ -68,6 +69,7 @@ Real-time line graphs showing 2-minute historical data:
 - GPU utilization history (if available)
 - GPU memory usage trends (if available)
 - Disk usage monitoring
+- Network upload and download bandwidth (MB/s, auto-scaled)
 
 ![Screenshot of tool running in graph mode](https://raw.githubusercontent.com/MahmoudDolah/linux_hwinfo64/main/assets/graph-view.png)
 
@@ -122,7 +124,7 @@ AMD GPU metrics availability depends on your specific hardware and drivers:
 - **Device Detection**: Automatically handles multiple GPU cards
 
 ### System Requirements
-- **Minimum Terminal**: 80x25 for standard mode, 100x35 for graph mode
+- **Minimum Terminal**: 80x25 for standard mode, 100x35 for graph mode. Graph mode skips graphs that don't fit, so all of them (including network) need roughly 60-70 rows depending on which GPU metrics are available
 - **Permissions**: Some GPU metrics may require elevated permissions
 - **Dependencies**: Works with standard Linux utilities, enhanced with GPU tools
 
