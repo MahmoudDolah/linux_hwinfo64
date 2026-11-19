@@ -29,12 +29,31 @@ A comprehensive Python-based system monitoring tool for Linux that provides real
 
 ## Installation
 
-Install from [PyPI](https://pypi.org/project/linux-hwinfo64/) as a standalone tool:
+The recommended way to install is with [pipx](https://pipx.pypa.io/), which installs the tool from [PyPI](https://pypi.org/project/linux-hwinfo64/) into its own isolated environment and puts the `linux-hwinfo64` command on your `PATH`.
 
+1. Install pipx if you don't have it:
+   ```bash
+   sudo apt install pipx        # Debian/Ubuntu
+   sudo dnf install pipx        # Fedora
+   sudo pacman -S python-pipx   # Arch
+   pipx ensurepath              # add ~/.local/bin to PATH, then open a new shell
+   ```
+2. Install linux-hwinfo64:
+   ```bash
+   pipx install linux-hwinfo64
+   ```
+3. Run it:
+   ```bash
+   linux-hwinfo64
+   ```
+
+To upgrade or remove it later:
 ```bash
-pipx install linux-hwinfo64     # or: uv tool install linux-hwinfo64
-linux-hwinfo64 --graph
+pipx upgrade linux-hwinfo64
+pipx uninstall linux-hwinfo64
 ```
+
+If you use [uv](https://docs.astral.sh/uv/), `uv tool install linux-hwinfo64` works the same way.
 
 ## Requirements
 
@@ -48,20 +67,22 @@ linux-hwinfo64 --graph
 ## Usage
 
 ### Running the Application
-From an installed package, use the `linux-hwinfo64` command with the same arguments. From a source checkout:
 ```bash
-uv run main.py                   # Standard monitoring mode
-uv run main.py --graph           # Graph mode with historical data
-uv run main.py --neofetch        # Display system info in neofetch-like format
-uv run main.py --record          # Record metrics to CSV
-uv run main.py --output file.csv # Custom CSV output file
+linux-hwinfo64                             # Standard monitoring mode
+linux-hwinfo64 --graph                     # Graph mode with historical data
+linux-hwinfo64 --neofetch                  # Display system info in neofetch-like format
+linux-hwinfo64 --record                    # Record metrics to hw_metrics.csv
+linux-hwinfo64 --record --output file.csv  # Record metrics to a custom CSV file
 ```
+
+Press `q` to quit the monitor, or `Ctrl+C` to stop recording.
 
 ### CLI Arguments
 - `--graph` or `-g`: Run in graph mode with historical charts
 - `--neofetch` or `-n`: Display system information in neofetch-like format
 - `--record` or `-r`: Record metrics to CSV file for analysis
-- `--output` or `-o`: Specify output CSV filename (default: hw_metrics.csv)
+- `--output` or `-o`: Specify output CSV filename used with `--record` (default: `hw_metrics.csv` in the current directory)
+- `--help` or `-h`: Show all options and the log file location
 
 ### Graph Mode Features
 Real-time line graphs showing 2-minute historical data:
@@ -97,6 +118,16 @@ Real-time line graphs showing 2-minute historical data:
 - **Memory Efficient**: Rolling deque for historical data storage
 
 ## Development
+
+### Running from Source
+Clone the repository and run it with [uv](https://docs.astral.sh/uv/). `uv run main.py` takes the same arguments as the installed `linux-hwinfo64` command:
+```bash
+git clone https://github.com/MahmoudDolah/linux_hwinfo64.git
+cd linux_hwinfo64
+uv run main.py --graph
+```
+
+To try your local changes as an installed command, run `pipx install --editable .` from the checkout.
 
 ### Code Quality
 ```bash
